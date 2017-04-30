@@ -1,0 +1,39 @@
+
+Notes:
+
+Overview of process:
+The Plan:
+* Starting point was the original blog post on the unreasonable
+  effectiveness of RNNs.
+* Instead of words, why not sounds (music).
+* Some others trained RNNs based on raw (time-domain) sample data.
+* Instead, I thought it would be better to try Frequency domain data (FFT).
+* Train a network.
+* Sample it and produce original music from it.
+* Training set: The complete works of the Smiths (reference).
+
+The execution:
+    * Sound -> FFT to represent frequency, phase.
+    * Down-sampling FFT (diagram needed) to make the input as small as possible but still meaningful.
+    * Model behavior with phase.  Did not converge.  Open question as to why this was the case.
+    * Discarded phase.  What this does to the original song when phase is discarded (or made random).
+        * Making phase 0 sounded very artificial (as one would expect).
+        * Making phase random likewise was still recognizable, but not "realistic".
+        * Observe how sound works in real life.  Precise timing between hitting two notes isn't important (i.e. phase).
+          What is important is that phase, once established for a freq bucket should be maintained and allowed to vary
+          slightly (small random delta from frame to frame), but should evolve slowly through the piece.
+        * All of this ends up meaning that phase isn't really important to train and preserve in order
+          to reconstruct a good sound, hence removing it should allow the model to start converging.
+    * Hyperparameter selection:
+        * Chose a hidden layer size of 1024.  This is perhaps too small to fit, but I did
+          not want it to be too large and risk too much "overfitting".  At any rate, this is the
+          starting point.
+        * Began training with learning rate of 0.1 (default)  At this setting, it seemed
+          that the shape of the curve was exponential and grew rather than monotonic decrease.  This
+          seems to indicate LR too large, so started bumping it down by halfs plotting it to see
+          the effect.  All curves showed a "ringing" in the shape of the model curve.
+
+
+    
+
+    
