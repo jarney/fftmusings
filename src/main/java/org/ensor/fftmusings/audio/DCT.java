@@ -6,11 +6,19 @@
 package org.ensor.fftmusings.audio;
 
 import java.awt.image.BufferedImage;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.imageio.ImageIO;
+import org.ensor.fftmusings.io.ICloseableIterator;
 import org.ensor.fftmusings.pipeline.IProcessor;
 import org.jtransforms.dct.DoubleDCT_1D;
 
@@ -133,6 +141,108 @@ public class DCT {
         }
     }
 
+    public static Reader createReader(String inputFile) throws FileNotFoundException {
+        FileInputStream fis = new FileInputStream(inputFile);
+        DataInputStream dis = new DataInputStream(fis);
+        return new Reader(dis);
+    }
+    
+    public static class Reader implements ICloseableIterator<AudioDCTData> {
+        
+        private AudioDCTData mCurrentPacket;
+        private DataInputStream mStream;
+        
+        public Reader(DataInputStream dis) {
+            mCurrentPacket = null;
+            mStream = dis;
+        }
+
+        private void readOne() {
+            try {
+                long nPackets = mStream.readLong();
+                if (nPackets <= 0) {
+                    mCurrentPacket = null;
+                    return;
+                }
+                mCurrentPacket = new AudioDCTData();
+                mCurrentPacket.mSamples = new double[(int)nPackets]; 
+                for (int i = 0; i < nPackets; i++) {
+                    mCurrentPacket.mSamples[i] = mStream.readDouble();
+                }
+            } catch (IOException ex) {
+                throw new RuntimeException("EOF while reading packets", ex);
+            }
+        }
+        
+        @Override
+        public boolean hasNext() {
+            // If we already have a packet,
+            // then we return true, next() will
+            // return that packet.
+            if (mCurrentPacket != null) {
+                return true;
+            }
+            // Read a packet (if we can).
+            readOne();
+            return mCurrentPacket != null;
+        }
+
+        @Override
+        public AudioDCTData next() {
+            // If we don't have a packet ready
+            // we attempt to read one.
+            if (mCurrentPacket == null) {
+                readOne();
+            }
+            AudioDCTData next = mCurrentPacket;
+            // Once we read one packet,
+            // the current packet is null and needs to be read.
+            mCurrentPacket = null;
+            return next;
+        }
+
+        @Override
+        public void close() throws IOException {
+            mStream.close();
+        }
+        
+    }
+    
+    public static class Write implements IProcessor<AudioDCTData, AudioDCTData> {
+        private DataOutputStream mDOS;
+        
+        public Write(DataOutputStream dos) {
+            mDOS = dos;
+        }
+
+        @Override
+        public void begin() {
+        }
+
+        @Override
+        public AudioDCTData process(AudioDCTData input) {
+            try {
+                mDOS.writeLong(input.mSamples.length);
+                for (int i = 0; i < input.mSamples.length; i++) {
+                    mDOS.writeDouble(input.mSamples[i]);
+                }
+            } catch (IOException ex) {
+                throw new RuntimeException("Exception writing data");
+            }
+            return input;
+        }
+
+        @Override
+        public void end() {
+            try {
+                // This is effectively the EOF marker.
+                mDOS.writeLong(0);
+            } catch (IOException ex) {
+                throw new RuntimeException("Exception writing data");
+            }
+        }
+    }
+    
     public static class ToPNG implements IProcessor<AudioDCTData, AudioDCTData> {
         private final File mFile;
         private final List<AudioDCTData> mAllData;

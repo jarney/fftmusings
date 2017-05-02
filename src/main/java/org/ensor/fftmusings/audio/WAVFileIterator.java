@@ -5,14 +5,10 @@
  */
 package org.ensor.fftmusings.audio;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
@@ -116,9 +112,6 @@ public class WAVFileIterator implements ICloseableIterator<AudioSample[]> {
             if (mAudioFormat.getSampleSizeInBits() != 16) {
                 throw new RuntimeException("this conversion only supports 16 bit audio");
             }
-            if (mAudioFormat.isBigEndian()) {
-                throw new RuntimeException("Big-endian audio is not supported");
-            }
             if (mAudioFormat == null) {
                 throw new RuntimeException("Streams not provided");
             }
@@ -130,7 +123,11 @@ public class WAVFileIterator implements ICloseableIterator<AudioSample[]> {
             for (int i = 0; i < channels.length; i++) {
                 channels[i] = new AudioSample(mBufferSize);
             }
-            byte[] data = new byte[4];
+            
+            int bytesPerChannel = mAudioFormat.getSampleSizeInBits()/8;
+            int bytes = bytesPerChannel * channels.length;
+            
+            byte[] data = new byte[bytes];
 
             int bytesRead;
             
@@ -138,9 +135,19 @@ public class WAVFileIterator implements ICloseableIterator<AudioSample[]> {
             if (bytesRead == -1) {
                 return null;
             }
-            for (int i = 1; i < mBufferSize; i++) {
+            for (int i = 0; i < mBufferSize; i++) {
                 for (int j = 0; j < channels.length; j++) {
-                    int i1 = (int)data[j*2 + 0] + ((int)data[j*2 + 1] << 8);
+                    int firstByte;
+                    int secondByte;
+                    if (mAudioFormat.isBigEndian()) {
+                        firstByte = 1;
+                        secondByte = 0;
+                    }
+                    else {
+                        firstByte = 0;
+                        secondByte = 1;
+                    }
+                    int i1 = (int)data[j*2 + firstByte] + ((int)data[j*2 + secondByte] << 8);
                     double f1 = (double)i1;
                     f1 /= (1 << 15)-1;
                     channels[j].mSamples[i] = f1;

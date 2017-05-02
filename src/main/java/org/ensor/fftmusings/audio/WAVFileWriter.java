@@ -23,11 +23,15 @@ import org.ensor.fftmusings.pipeline.IProcessor;
 public class WAVFileWriter implements IProcessor<AudioSample[], Boolean> {
 
     public static WAVFileWriter create(String aOutputFilename) {
+        int channels = 2;
+        int sampleSize = 16;
+        int frameSize = sampleSize/8 * channels;
+        
         AudioFormat targetFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED,
                 11025.0f, // Sample rate
-                16, // Sample size (bits)
-                2, // Channels
-                4, // Frame Size
+                sampleSize, // Sample size (bits)
+                channels, // Channels
+                frameSize, // Frame Size
                 11025.0f, // Frame Rate
                 false); // Big-endian
         return new WAVFileWriter(aOutputFilename, targetFormat);
@@ -77,9 +81,6 @@ public class WAVFileWriter implements IProcessor<AudioSample[], Boolean> {
         if (aAudioFormat.getSampleSizeInBits() != 16) {
             throw new RuntimeException("this conversion only supports 16 bit audio");
         }
-        if (aAudioFormat.isBigEndian()) {
-            throw new RuntimeException("Big-endian audio is not supported");
-        }
         if (aSamples == null) {
             throw new RuntimeException("Streams not provided");
         }
@@ -87,23 +88,33 @@ public class WAVFileWriter implements IProcessor<AudioSample[], Boolean> {
             throw new RuntimeException("No streams provided");
         }
         int size = aSamples[0].size();
-        for (int j = 0; j < aSamples.length; j++) {
-            if (aSamples[j].size() != size) {
-                throw new RuntimeException("Streams are different sizes: " + aSamples[j].size() + "!=" + size);
+        for (int channel = 0; channel < aSamples.length; channel++) {
+            if (aSamples[channel].size() != size) {
+                throw new RuntimeException("Streams are different sizes: " + aSamples[channel].size() + "!=" + size);
             }
         }
         
         byte[] rawData = new byte[aSamples[0].size()*aAudioFormat.getFrameSize()];
         
         for (int i = 0; i < size; i++) {
-            for (int j = 0; j < aSamples.length; j++) {
+            for (int channel = 0; channel < aSamples.length; channel++) {
                 
-                double f1 = aSamples[j].mSamples[i];
+                double f1 = aSamples[channel].mSamples[i];
                 f1 *= (1 << 15)-1;
                 int if1 = (int)f1;
 
-                rawData[i*2*aSamples.length + j*2 + 0] = (byte)(if1 & 0xff);
-                rawData[i*2*aSamples.length + j*2 + 1] = (byte)((if1 >> 8) & 0xff);
+                int firstByte;
+                int secondByte;
+                if (aAudioFormat.isBigEndian()) {
+                    firstByte = 1;
+                    secondByte = 0;
+                }
+                else {
+                    firstByte = 0;
+                    secondByte = 1;
+                }
+                rawData[(i*aSamples.length + channel)*2 + firstByte] = (byte)(if1 & 0xff);
+                rawData[(i*aSamples.length + channel)*2 + secondByte] = (byte)((if1 >> 8) & 0xff);
             
             }
         }

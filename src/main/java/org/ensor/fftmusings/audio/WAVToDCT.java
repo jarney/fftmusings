@@ -21,20 +21,17 @@ import org.ensor.fftmusings.pipeline.Pipeline;
  *
  * @author jona
  */
-public class PCATransformDCT {
+public class WAVToDCT {
     public static void main(String[] args) throws Exception {
         
         int sampleSize = 512;
         String inputDirectory = "data/wav";
-        String outputDirectory = "data/qft";
-        String pcaFilename = "data/pca/smiths-30.pca";
-        int nQuanta = 16;
+        String outputDirectory = "data/dct";
         
         // Creating a pool of 16 threads to consume 8 cores.
         // About half the time spent processing is IO bound, so 16 threads
         // should keep 8 cores busy.
         ExecutorService executor = Executors.newFixedThreadPool(16);
-        PCATransformer pca = PCAFactory.read(pcaFilename);
         
         File dir = new File(inputDirectory);
         for (File inputFile : dir.listFiles()) {
@@ -42,7 +39,7 @@ public class PCATransformDCT {
             System.out.println("Input " + inputFile.getAbsolutePath());
             System.out.println("Output " + outputFile.getAbsolutePath());
         
-            executor.execute(new PCAProcess(inputFile, outputFile, sampleSize, nQuanta, pca));
+            executor.execute(new DCTProcess(inputFile, outputFile, sampleSize));
         }
         
         executor.shutdown();
@@ -52,21 +49,17 @@ public class PCATransformDCT {
         System.out.println("Finished processing");
     }
     
-    static class PCAProcess implements Runnable {
+    static class DCTProcess implements Runnable {
         
-        private final PCATransformer mPCA;
         private final int mSampleSize;
-        private final int mQuanta;
         private final String mInputFilename;
         private final String mOutputFilename;
         
         
-        public PCAProcess(File inputFile, File outputFile, int sampleSize, int nQuanta, PCATransformer pca) {
-            mPCA = pca;
+        public DCTProcess(File inputFile, File outputFile, int sampleSize) {
             mSampleSize = sampleSize;
-            mQuanta = nQuanta;
             mInputFilename = inputFile.getAbsolutePath();
-            mOutputFilename = outputFile.getAbsolutePath().replace(".wav", ".qft");
+            mOutputFilename = outputFile.getAbsolutePath().replace(".wav", ".dct");
         }
         
         public void run() {
@@ -76,10 +69,7 @@ public class PCATransformDCT {
                     try (DataOutputStream dos = new DataOutputStream(os)) {
                         new Pipeline(new ChannelSelector(AudioSample.class, 0))
                                 .add(new DCT.Forward(false))
-                                .add(new DCT.Threshold(0.0))
-                                .add(new PCATransformProcessorDCTForward(mPCA))
-                                .add(new Quantize.Forward(mQuanta, -1, 1, true))
-                                .add(new QuantizedVectorWrite(dos))
+                                .add(new DCT.Write(dos))
                                 .execute(wavFileIterator);
                     }
                 }

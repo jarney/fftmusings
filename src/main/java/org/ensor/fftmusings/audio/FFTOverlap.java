@@ -8,6 +8,7 @@ package org.ensor.fftmusings.audio;
 import org.ensor.fftmusings.pipeline.IProcessor;
 import org.jtransforms.fft.DoubleFFT_1D;
 
+
 /**
  *
  * @author jona
@@ -17,7 +18,7 @@ public class FFTOverlap {
 
         private DoubleFFT_1D mFFT;
         private double[] mWindow;
-        private int mFFTWindowSize;
+        private final int mFFTWindowSize;
         private AudioSample mLastSample;
         //private double[] mLastPhases;
 
@@ -74,6 +75,8 @@ public class FFTOverlap {
             // Compute the forward FFT.
             mFFT.complexForward(fftData);
 
+            //dumpFFT("forward.log", fftData);
+            
             // Compute the magnitude.
             for (int i = 0; i < spectrum.mMagnitude.length; i++) {
                 double re = fftData[i*2];
@@ -99,6 +102,15 @@ public class FFTOverlap {
         }
     
     }
+    
+    
+    public static void dumpFFT(String logFilename, double[]data) {
+        System.out.println(logFilename);
+        for (int i = 0; i < data.length/2; i++) {
+            System.out.println("" + i + " " + data[i*2] + " " + data[i*2+1]);
+        }
+    }
+    
     
     /**
      * See also http://dsp.stackexchange.com/questions/9877/reconstruction-of-audio-signal-from-spectrogram
@@ -140,10 +152,9 @@ public class FFTOverlap {
 
             double[] fftBuffer = new double[mFFTWindowSize*2];
             if (xn == null) {
-                xn = new double[mFFTWindowSize*2];
+                xn = new double[mFFTWindowSize];
                 for (int i = 0; i < mFFTWindowSize; i++) {
-                    xn[i*2] = 0;
-                    xn[i*2+1] = 0;
+                    xn[i] = 0;
                 }
             }
 
@@ -152,15 +163,15 @@ public class FFTOverlap {
             for (int i = 0; i < spectrum.mMagnitude.length; i++) {
                 double angle = spectrum.mPhase[i];
                 double m = spectrum.mMagnitude[i];
-                fftBuffer[i*2] = m * Math.cos(angle);
-                fftBuffer[i*2+1] = m * Math.sin(angle);
+                fftBuffer[i*2] = m/2 * Math.cos(angle);
+                fftBuffer[i*2+1] = m/2 * Math.sin(angle);
             }
             // Next, we reconstruct the top-half of the FFT
             // from the fact that it is the complex
             // conjugate of the bottom half (tricky).
             // Ensure that the first half is the complex
             // conjugate of the second half.
-            for (int i = 1; i < spectrum.mMagnitude.length/2; i++) {
+            for (int i = 1; i < spectrum.mMagnitude.length; i++) {
                 int idx0 = (i*2);
                 int idx1 = (i*2+1);
 
@@ -173,11 +184,12 @@ public class FFTOverlap {
                 fftBuffer[idx3] = -fftBuffer[idx1];
             }
 
+            //dumpFFT("reverse.log", fftBuffer);
+            
             mFFT.complexInverse(fftBuffer, true);
 
-            for (int i = 0; i < xn.length/2; i++) {
-                xn[i*2] += fftBuffer[i*2];
-                xn[i*2+1] += fftBuffer[i*2+1];
+            for (int i = 0; i < xn.length; i++) {
+                xn[i] += (fftBuffer[i*2]);// * mWindow[i]);
             }
 
 
@@ -186,16 +198,14 @@ public class FFTOverlap {
             // reconstructed signal.
             AudioSample samples = new AudioSample(mFFTWindowSize/2);
             for (int i = 0; i < samples.size(); i++) {
-                samples.mSamples[i] = xn[i*2];
+                samples.mSamples[i] = xn[i];
             }
 
             // And finally, we shift our signal upwards
             // and this will become our next one.
-            for (int i = 0; i < samples.size(); i++) {
-                xn[i*2] = xn[i*2 + samples.size()];
-                xn[i*2+1] = xn[i*2+1 + samples.size()];
-                xn[i*2 + samples.size()] = 0;
-                xn[i*2+1 + samples.size()] = 0;
+            for (int i = 0; i < xn.length/2; i++) {
+                xn[i] = xn[i + xn.length/2];
+                xn[i + xn.length/2] = 0;
             }
 
 

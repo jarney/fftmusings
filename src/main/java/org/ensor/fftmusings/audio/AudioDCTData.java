@@ -10,7 +10,7 @@ package org.ensor.fftmusings.audio;
  * @author jona
  */
 public class AudioDCTData {
-    protected double[] mSamples;
+    public double[] mSamples;
 
     public AudioDCTData(int aSampleSize) {
         mSamples = new double[aSampleSize];
