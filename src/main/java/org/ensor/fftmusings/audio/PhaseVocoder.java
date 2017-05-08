@@ -26,17 +26,14 @@ public class PhaseVocoder {
         private final double mSampleRate;
         private final int mWindowSize;
         private final int mHopSize;
-        private final FFTOverlap.Forward mFFT;
-        private Decoder mDecoder;
+        private final FFTOverlap.ForwardPhaseDelta mFFT;
         
-        public Encoder(double sampleRate, FFTOverlap.Forward fft) {
+        public Encoder(double sampleRate, FFTOverlap.ForwardPhaseDelta fft) {
             mSampleRate = sampleRate;
             mHopSize = fft.getHopSize();
             mWindowSize = fft.getWindowSize();
             mFFT = fft;
         }
-        
-        double[] mLastPhase;
         
         
         @Override
@@ -49,21 +46,8 @@ public class PhaseVocoder {
             MagnitudeSpectrum magnitudeSpectrum = mFFT.process(input);
             
             VocoderData output = new VocoderData();
-            output.mFrequencies = new double[mWindowSize - mHopSize];
-            output.mMagnitudes = new double[mWindowSize - mHopSize];
-            
-            if (mLastPhase == null) {
-                mLastPhase = new double[magnitudeSpectrum.mMagnitude.length];
-                for (int k = 0; k < magnitudeSpectrum.mMagnitude.length; k++) {
-                    mLastPhase[k] = 0;
-                }
-            }
-
-//            for (int k = 0; k < magnitudeSpectrum.mMagnitude.length; k++) {
-//                output.mMagnitudes[k] = magnitudeSpectrum.mMagnitude[k];
-//                output.mFrequencies[k] = magnitudeSpectrum.mPhase[k];
-//            }
-
+            output.mFrequencies = new double[mWindowSize/2];
+            output.mMagnitudes = new double[mWindowSize/2];
             
             double bin_centre_freq_scalar = (TWO_PI * mHopSize) / mWindowSize;
             double radians_to_hz_scalar = mSampleRate / (TWO_PI * mHopSize);
@@ -71,15 +55,9 @@ public class PhaseVocoder {
             ms2.mMagnitude = new double[magnitudeSpectrum.mMagnitude.length];
             ms2.mPhase = new double[magnitudeSpectrum.mMagnitude.length];
             
-            
             for (int k = 0; k < magnitudeSpectrum.mMagnitude.length; k++) {
-                double delta = magnitudeSpectrum.mPhase[k] - mLastPhase[k];
-                while (delta > Math.PI) {delta = delta - TWO_PI;}
-                while (delta < -Math.PI) {delta = delta + TWO_PI;}
                 output.mMagnitudes[k] = magnitudeSpectrum.mMagnitude[k];
-                output.mFrequencies[k] = (delta + (k) * bin_centre_freq_scalar) * radians_to_hz_scalar;
-                
-                mLastPhase[k] = magnitudeSpectrum.mPhase[k];
+                output.mFrequencies[k] = (magnitudeSpectrum.mPhase[k] + (k) * bin_centre_freq_scalar) * radians_to_hz_scalar;
             }
             
             return output;
@@ -114,24 +92,20 @@ public class PhaseVocoder {
     
     public static class Decoder implements IProcessor<VocoderData, AudioSample> {
 
-        private final FFTOverlap.Reverse mIFFT;
+        private final FFTOverlap.ReversePhaseDelta mIFFT;
         private final double mSampleRate;
         private final int mWindowSize;
         private final int mHopSize;
-        private VocoderData vlast;
-        private MagnitudeSpectrum mslast;
+        private MagnitudeSpectrum mMagnitudeSpectrum;
         
-        public Decoder(double sampleRate, FFTOverlap.Reverse reverseFFT) {
+        public Decoder(double sampleRate, FFTOverlap.ReversePhaseDelta reverseFFT) {
             mIFFT = reverseFFT;
             mSampleRate = sampleRate;
             mHopSize = reverseFFT.getHopSize();
             mWindowSize = reverseFFT.getWindowSize();
-            mslast = new MagnitudeSpectrum();
-            mslast.mPhase = new double[mWindowSize/2];
-            mslast.mMagnitude = new double[mWindowSize/2];
-            vlast = new VocoderData();
-            vlast.mFrequencies = new double[mWindowSize/2];
-            vlast.mMagnitudes = new double[mWindowSize/2];
+            mMagnitudeSpectrum = new MagnitudeSpectrum();
+            mMagnitudeSpectrum.mPhase = new double[mWindowSize/2];
+            mMagnitudeSpectrum.mMagnitude = new double[mWindowSize/2];
         }
         
         @Override
@@ -147,21 +121,14 @@ public class PhaseVocoder {
             // Current frequency data
             // goes into last phase holder.
             for (int k = 0; k < input.mFrequencies.length; k++) {
-                double delta2 = input.mFrequencies[k] / radians_to_hz_scalar - ((double)k)*bin_centre_freq_scalar;
-                mslast.mPhase[k] = mslast.mPhase[k] + delta2;
+                mMagnitudeSpectrum.mMagnitude[k] = input.mMagnitudes[k];
+                mMagnitudeSpectrum.mPhase[k] = input.mFrequencies[k] / radians_to_hz_scalar - ((double)k)*bin_centre_freq_scalar;
             }
             
             // Process last sample since it consists
             // of the magnitude from last sample
             // plus phase of this sample.
-            AudioSample as = mIFFT.process(mslast);
-            
-            // Current magnitude data goes
-            // into last magnitude holder.
-            // goes into last phase holder.
-            for (int k = 0; k < input.mFrequencies.length; k++) {
-                mslast.mMagnitude[k] = input.mMagnitudes[k];
-            }
+            AudioSample as = mIFFT.process(mMagnitudeSpectrum);
             
             return as;
         }

@@ -24,8 +24,8 @@ package org.ensor.fftmusings.audio;
  * @author jona
  */
 public class MagnitudeSpectrum {
-    protected double[] mMagnitude;
-    protected double[] mPhase;
+    public double[] mMagnitude;
+    public double[] mPhase;
 
     public MagnitudeSpectrum(int aSampleSize) {
         mMagnitude = new double[aSampleSize];

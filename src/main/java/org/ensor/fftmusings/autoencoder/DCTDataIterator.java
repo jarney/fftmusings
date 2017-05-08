@@ -5,19 +5,14 @@
  */
 package org.ensor.fftmusings.autoencoder;
 
-import java.io.DataInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Random;
-import org.ensor.fftmusings.audio.AudioDCTData;
-import org.ensor.fftmusings.audio.DCT;
-import org.ensor.fftmusings.audio.QuantizedVector;
-import org.ensor.fftmusings.audio.RNNInput;
-import org.ensor.fftmusings.pca.PCATransformer;
+import org.ensor.fftmusings.audio.FFTOverlap;
+import org.ensor.fftmusings.audio.MagnitudeSpectrum;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.DataSetPreProcessor;
@@ -31,24 +26,34 @@ import org.nd4j.linalg.factory.Nd4j;
 public class DCTDataIterator implements DataSetIterator {
     private static final long serialVersionUID = -7287833919126626356L;
     
-    private final int miniBatchSize;
-    private final int nsamples;
+    private int miniBatchSize;
     private final int numExamplesToFetch;
     private int examplesSoFar = 0;
     private final Random mRNG;
     private final PrintStream mOutput;
+    private final List<MagnitudeSpectrum> data = new ArrayList<>();
     
     public DCTDataIterator(Random rng,
             int aMiniBatchSize,
             int iterationsPerBatch,
-            int samplesPerBatch,
             PrintStream output
-    ) {
+    ) throws Exception {
         mRNG = rng;
         miniBatchSize = aMiniBatchSize;
         numExamplesToFetch = miniBatchSize * iterationsPerBatch;
-        nsamples = samplesPerBatch;
         mOutput = output;
+        
+        int fileno = Math.abs(mRNG.nextInt());
+        fileno = fileno % 95;
+        fileno = 20;
+        File f = new File("data/fft/" + fileno + ".fft");
+
+        try (FFTOverlap.Reader dctReader = FFTOverlap.createReader(f.getAbsolutePath())) {
+            while (dctReader.hasNext()) {
+                data.add(dctReader.next());
+            }
+        }
+        
     }
     
     @Override
@@ -63,9 +68,6 @@ public class DCTDataIterator implements DataSetIterator {
 
     @Override
     public DataSet next(int num) {
-        if (examplesSoFar + num > numExamplesToFetch) {
-            throw new NoSuchElementException();
-        }
         try {
             DataSet nextData = nextThrows(num);
             examplesSoFar += num;
@@ -80,42 +82,24 @@ public class DCTDataIterator implements DataSetIterator {
         //Allocate space:
         
         int columns = inputColumns();
-        final INDArray input = Nd4j.zeros(new int[]{num*nsamples, columns});
-        final INDArray labels = Nd4j.zeros(new int[]{num*nsamples, columns});
+        final INDArray input = Nd4j.zeros(new int[]{num, columns});
+        final INDArray labels = Nd4j.zeros(new int[]{num, columns});
 
         long batchStartTime = System.currentTimeMillis();
-        
         for (int curIdx = 0; curIdx < num; curIdx++) {
-            int fileno = Math.abs(mRNG.nextInt());
-            fileno = fileno % 95;
-            //fileno = 20;
-            File f = new File("data/dct/" + fileno + ".dct");
-            long startTime = System.currentTimeMillis();
-            List<QuantizedVector> fileData = new ArrayList<>();
             
-            List<AudioDCTData> data = new ArrayList<>();
+            int offset = mRNG.nextInt(data.size());
 
-            try (DCT.Reader dctReader = DCT.createReader(f.getAbsolutePath())) {
-
-                while (dctReader.hasNext()) {
-                    data.add(dctReader.next());
-                }
+            MagnitudeSpectrum sample = data.get(offset);
+            for (int j = 0; j < sample.mMagnitude.length; j++) {
+                double x = sample.mMagnitude[j] / 170;
+                //x = (x >= 0) ? Math.sqrt(x) : -Math.sqrt(-x);
+                input.putScalar(new int[]{curIdx, j}, x);
+                labels.putScalar(new int[]{curIdx, j}, x);
             }
             
-            int offset = mRNG.nextInt(data.size()-nsamples);
-            
-            for (int i = 0; i < nsamples; i++) {
-                AudioDCTData sample = data.get(i);
-                for (int j = 0; j < sample.mSamples.length; j++) {
-                    input.putScalar(new int[]{curIdx*nsamples + i, j}, sample.mSamples[j]);
-                    labels.putScalar(new int[]{curIdx*nsamples + i, j}, sample.mSamples[j]);
-                }
-            }
-            
-            
-            long endTime = System.currentTimeMillis();
-            mOutput.println("Sampling from file " + f.getName() + "(" + offset + " - " + (offset+nsamples) + ") took " + (endTime - startTime) + " ms");
         }
+            
         long batchEndTime = System.currentTimeMillis();
         
         mOutput.println("Samples calculated : total time " + (batchEndTime - batchStartTime) + " ms");
@@ -137,6 +121,10 @@ public class DCTDataIterator implements DataSetIterator {
         return 512;
     }
 
+    public void setMiniBatchSize(int aMiniBatchSize) {
+        miniBatchSize = aMiniBatchSize;
+    }
+    
     @Override
     public void reset() {
         examplesSoFar = 0;

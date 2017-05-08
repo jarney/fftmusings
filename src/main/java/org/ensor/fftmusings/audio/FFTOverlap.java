@@ -5,6 +5,12 @@
  */
 package org.ensor.fftmusings.audio;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import org.ensor.fftmusings.io.ICloseableIterator;
 import org.ensor.fftmusings.pipeline.IProcessor;
 import org.jtransforms.fft.DoubleFFT_1D;
 
@@ -14,6 +20,43 @@ import org.jtransforms.fft.DoubleFFT_1D;
  * @author jona
  */
 public class FFTOverlap {
+    public static final double TWO_PI = Math.PI*2;
+    
+    public static class ForwardPhaseDelta extends Forward {
+        private final double[] mLastPhase;
+        public ForwardPhaseDelta(int fftWindowSize) {
+            super(fftWindowSize);
+            mLastPhase = new double[fftWindowSize/2];
+        }
+        public MagnitudeSpectrum process(AudioSample input) {
+            MagnitudeSpectrum magnitudeSpectrum = super.process(input);
+            for (int i = 0; i < magnitudeSpectrum.mPhase.length; i++) {
+                double delta = magnitudeSpectrum.mPhase[i] - mLastPhase[i];
+                while (delta > Math.PI) {delta = delta - TWO_PI;}
+                while (delta < -Math.PI) {delta = delta + TWO_PI;}
+                magnitudeSpectrum.mPhase[i] = delta;
+            }
+            return magnitudeSpectrum;
+        }
+    }
+    public static class ReversePhaseDelta extends Reverse {
+        private final double[] mLastPhase;
+        public ReversePhaseDelta(int fftWindowSize) {
+            super(fftWindowSize);
+            mLastPhase = new double[fftWindowSize/2];
+        }
+        public AudioSample process(MagnitudeSpectrum input) {
+            for (int i = 0; i < input.mPhase.length; i++) {
+                double phase = input.mPhase[i] + mLastPhase[i];
+                while (phase > 2*Math.PI) {phase = phase - TWO_PI;}
+                while (phase < 0) {phase = phase + TWO_PI;}
+                input.mPhase[i] = phase;
+            }
+            AudioSample output = super.process(input);
+            return output;
+        }
+    }
+    
     public static class Forward implements IProcessor<AudioSample, MagnitudeSpectrum> {
 
         private DoubleFFT_1D mFFT;
@@ -217,6 +260,109 @@ public class FFTOverlap {
         }
 
 
+    }
+    public static class Write implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum> {
+        private DataOutputStream mDOS;
+        
+        public Write(DataOutputStream dos) {
+            mDOS = dos;
+        }
+
+        @Override
+        public void begin() {
+        }
+
+        @Override
+        public MagnitudeSpectrum process(MagnitudeSpectrum input) {
+            try {
+                mDOS.writeLong(input.mMagnitude.length);
+                for (int i = 0; i < input.mMagnitude.length; i++) {
+                    mDOS.writeDouble(input.mMagnitude[i]);
+                    mDOS.writeDouble(input.mPhase[i]);
+                }
+            } catch (IOException ex) {
+                throw new RuntimeException("Exception writing data");
+            }
+            return input;
+        }
+
+        @Override
+        public void end() {
+            try {
+                // This is effectively the EOF marker.
+                mDOS.writeLong(0);
+            } catch (IOException ex) {
+                throw new RuntimeException("Exception writing data");
+            }
+        }
+    }
+    public static Reader createReader(String inputFile) throws FileNotFoundException {
+        FileInputStream fis = new FileInputStream(inputFile);
+        DataInputStream dis = new DataInputStream(fis);
+        return new Reader(dis);
+    }
+    
+    public static class Reader implements ICloseableIterator<MagnitudeSpectrum> {
+        
+        private MagnitudeSpectrum mCurrentPacket;
+        private DataInputStream mStream;
+        
+        public Reader(DataInputStream dis) {
+            mCurrentPacket = null;
+            mStream = dis;
+        }
+
+        private void readOne() {
+            try {
+                long nPackets = mStream.readLong();
+                if (nPackets <= 0) {
+                    mCurrentPacket = null;
+                    return;
+                }
+                mCurrentPacket = new MagnitudeSpectrum();
+                mCurrentPacket.mMagnitude = new double[(int)nPackets]; 
+                mCurrentPacket.mPhase = new double[(int)nPackets]; 
+                for (int i = 0; i < nPackets; i++) {
+                    mCurrentPacket.mMagnitude[i] = mStream.readDouble();
+                    mCurrentPacket.mPhase[i] = mStream.readDouble();
+                }
+            } catch (IOException ex) {
+                throw new RuntimeException("EOF while reading packets", ex);
+            }
+        }
+        
+        @Override
+        public boolean hasNext() {
+            // If we already have a packet,
+            // then we return true, next() will
+            // return that packet.
+            if (mCurrentPacket != null) {
+                return true;
+            }
+            // Read a packet (if we can).
+            readOne();
+            return mCurrentPacket != null;
+        }
+
+        @Override
+        public MagnitudeSpectrum next() {
+            // If we don't have a packet ready
+            // we attempt to read one.
+            if (mCurrentPacket == null) {
+                readOne();
+            }
+            MagnitudeSpectrum next = mCurrentPacket;
+            // Once we read one packet,
+            // the current packet is null and needs to be read.
+            mCurrentPacket = null;
+            return next;
+        }
+
+        @Override
+        public void close() throws IOException {
+            mStream.close();
+        }
+        
     }
 
 }

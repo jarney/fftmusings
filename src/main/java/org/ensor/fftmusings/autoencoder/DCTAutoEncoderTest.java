@@ -10,6 +10,8 @@ import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.util.ModelSerializer;
 import org.ensor.fftmusings.audio.AudioSample;
 import org.ensor.fftmusings.audio.DCT;
+import org.ensor.fftmusings.audio.FFTOverlap;
+import org.ensor.fftmusings.audio.FFTToPNG;
 import org.ensor.fftmusings.audio.WAVFileWriter;
 import org.ensor.fftmusings.pipeline.ChannelDuplicator;
 import org.ensor.fftmusings.pipeline.Pipeline;
@@ -21,19 +23,20 @@ import org.ensor.fftmusings.pipeline.Pipeline;
 public class DCTAutoEncoderTest {
 
     public static void main(String[] args) throws IOException {
-        MultiLayerNetwork model = ModelSerializer.restoreMultiLayerNetwork("data/aa/model-305.aa");
+        MultiLayerNetwork model = ModelSerializer.restoreMultiLayerNetwork("data/daa/model-39.faa");
         
         //model.init();
         
-        String inputFilename = "data/dct/20.dct";
+        String inputFilename = "data/fft/0.fft";
         String outputFilename = "sample.wav";
         
         // Read DCT data from file and write a corresponding
         // .wav file based on that after passing it through the
         // auto-encoder to see what the network has learned.
-        try (DCT.Reader wavFileIterator = DCT.createReader(inputFilename)) {
+        try (FFTOverlap.Reader wavFileIterator = FFTOverlap.createReader(inputFilename)) {
             new Pipeline(new AutoEncoderProcessor(model))
-                .add(new DCT.Reverse(false))
+                .add(new FFTToPNG("fft-magnitude-daa2.png", false))
+                .add(new FFTOverlap.Reverse(1024))
                 .add(new ChannelDuplicator(AudioSample.class, 2))
                 .add(WAVFileWriter.create(outputFilename))
                 .execute(wavFileIterator);

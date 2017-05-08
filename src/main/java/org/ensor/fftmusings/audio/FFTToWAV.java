@@ -15,10 +15,10 @@ import org.ensor.fftmusings.pipeline.Pipeline;
  *
  * @author jona
  */
-public class DCTToWAV {
+public class FFTToWAV {
     public static void main(String[] args) throws Exception {
         
-        String inputDirectory = "data/dct";
+        String inputDirectory = "data/fft";
         String outputDirectory = "data/wav2";
         
         // Creating a pool of 16 threads to consume 8 cores.
@@ -32,7 +32,7 @@ public class DCTToWAV {
             System.out.println("Input " + inputFile.getAbsolutePath());
             System.out.println("Output " + outputFile.getAbsolutePath());
         
-            executor.execute(new DCTProcess(inputFile, outputFile));
+            executor.execute(new DCTProcess(inputFile, outputFile, 512));
         }
         
         executor.shutdown();
@@ -46,18 +46,21 @@ public class DCTToWAV {
         
         private final String mInputFilename;
         private final String mOutputFilename;
+        private final int mSampleSize;
         
         
-        public DCTProcess(File inputFile, File outputFile) {
+        public DCTProcess(File inputFile, File outputFile, int sampleSize) {
             mInputFilename = inputFile.getAbsolutePath();
-            mOutputFilename = outputFile.getAbsolutePath().replace(".dct", ".wav");
+            mOutputFilename = outputFile.getAbsolutePath().replace(".fft", ".wav");
+            mSampleSize = sampleSize;
         }
         
         public void run() {
             System.out.println("Starting " + mInputFilename);
-            
-            try (DCT.Reader wavFileIterator = DCT.createReader(mInputFilename)) {
-                new Pipeline(new DCT.Reverse(false))
+            int fftWindowSize = mSampleSize*2;
+
+            try (FFTOverlap.Reader wavFileIterator = FFTOverlap.createReader(mInputFilename)) {
+                new Pipeline(new FFTOverlap.Reverse(fftWindowSize))
                     .add(new ChannelDuplicator(AudioSample.class, 2))
                     .add(WAVFileWriter.create(mOutputFilename))
                     .execute(wavFileIterator);

@@ -21,12 +21,21 @@ public class FFTToPNG implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum
     private final File mFile;
     private final List<MagnitudeSpectrum> mAllData;
     private final boolean mPlotPhase;
+    private boolean mPlotPolar;
+    
     
     public FFTToPNG(String aFilename, boolean plotPhase) {
         mFile = new File(aFilename);
         mPlotPhase = plotPhase;
+        mPlotPolar = false;
         mAllData = new ArrayList<>();
     }
+    
+    public FFTToPNG(String aFilename, boolean plotPhase, boolean plotPolar) {
+        this(aFilename, plotPhase);
+        mPlotPolar = plotPolar;
+    }
+    
 
     @Override
     public void begin() {
@@ -52,7 +61,7 @@ public class FFTToPNG implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum
         
         
         double max = 0;
-        if (!mPlotPhase) {
+        if (!mPlotPhase || mPlotPolar) {
             for (MagnitudeSpectrum d : mAllData) {
                 for (int y = 0; y < d.mMagnitude.length; y++) {
                     max = Math.max(max, Math.abs(d.mMagnitude[y]));
@@ -60,10 +69,40 @@ public class FFTToPNG implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum
             }
         }
         
+        System.out.println("Normalization factor: " + max);
+        
         int x = 0;
         for (MagnitudeSpectrum d : mAllData) {
 
-            if (mPlotPhase) {
+            if (mPlotPolar) {
+                for (int y = 0; y < d.mMagnitude.length; y++) {
+
+                    d.mMagnitude[y] /= max;
+
+                    if (d.mMagnitude[y] > 0) {
+                        d.mMagnitude[y] = Math.sqrt(d.mMagnitude[y]);
+                    }
+                    else {
+                        d.mMagnitude[y] = -Math.sqrt(-d.mMagnitude[y]);
+                    }
+
+                    if (d.mMagnitude[y] > 1.0 || d.mMagnitude[y] < -1.0) {
+                        System.out.println("Out of bounds, need normalization " + d.mMagnitude[y]);
+                    }
+
+                    int value = 0;
+                    double r = (d.mMagnitude[y] * 127) * Math.sin(d.mPhase[y]) + 127;
+                    double g = (d.mMagnitude[y] * 127) * Math.cos(d.mPhase[y]) + 127;
+                    int rv = ((int)r) & 0xff;
+                    int gv = ((int)g) & 0xff;
+                    int bv = 0;
+
+                    value = rv | (gv << 8) | (bv << 16);
+
+                    bufferedImage.setRGB(x, y, value);
+                }
+            }
+            else if (mPlotPhase) {
                 for (int y = 0; y < d.mPhase.length; y++) {
                     double v = d.mPhase[y];
                     if (v < 0) {
@@ -86,20 +125,20 @@ public class FFTToPNG implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum
 
                     d.mMagnitude[y] /= max;
 
-                    if (d.mMagnitude[y] > 0) {
-                        d.mMagnitude[y] = Math.sqrt(d.mMagnitude[y]);
-                    }
-                    else {
-                        d.mMagnitude[y] = -Math.sqrt(-d.mMagnitude[y]);
-                    }
+//                    if (d.mMagnitude[y] > 0) {
+//                        d.mMagnitude[y] = Math.sqrt(d.mMagnitude[y]);
+//                    }
+//                    else {
+//                        d.mMagnitude[y] = -Math.sqrt(-d.mMagnitude[y]);
+//                    }
 
-                    if (d.mMagnitude[y] > 1.0 || d.mMagnitude[y] < -1.0) {
+                    if (d.mMagnitude[y] > 1.0 || d.mMagnitude[y] < 0.0) {
                         System.out.println("Out of bounds, need normalization " + d.mMagnitude[y]);
                     }
 
                     int value = 0;
 
-                    value = (int)(d.mMagnitude[y] * 255);
+                    value = (int)(d.mMagnitude[y] * 254);
 
                     value = value & 0xff;
 

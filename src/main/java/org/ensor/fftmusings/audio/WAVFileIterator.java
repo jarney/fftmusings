@@ -155,10 +155,9 @@ public class WAVFileIterator implements ICloseableIterator<AudioSample[]> {
 
                 bytesRead = mAudioInputStream.read(data);
                 if (bytesRead == -1) {
-                    data[0] = 0;
-                    data[1] = 0;
-                    data[2] = 0;
-                    data[3] = 0;
+                    for (int j = 0; j < bytes; j++) {
+                        data[j] = 0;
+                    }
                 }
             }
 

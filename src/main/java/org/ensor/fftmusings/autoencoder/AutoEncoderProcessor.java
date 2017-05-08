@@ -6,39 +6,62 @@
 package org.ensor.fftmusings.autoencoder;
 
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
-import org.ensor.fftmusings.audio.AudioDCTData;
+import org.ensor.fftmusings.audio.MagnitudeSpectrum;
 import org.ensor.fftmusings.pipeline.IProcessor;
+import org.nd4j.linalg.activations.Activation;
+import org.nd4j.linalg.activations.IActivation;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
+import org.nd4j.linalg.lossfunctions.ILossFunction;
+import org.nd4j.linalg.lossfunctions.LossFunctions;
 
 /**
  *
  * @author jona
  */
-public class AutoEncoderProcessor implements IProcessor<AudioDCTData, AudioDCTData> {
+public class AutoEncoderProcessor implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum> {
 
-    private MultiLayerNetwork mModel;
+    private final MultiLayerNetwork mModel;
+    private final ILossFunction mLoss;
+    private final IActivation mActivation;
+    private double mTotalScore;
     
     public AutoEncoderProcessor(MultiLayerNetwork model) {
         mModel = model;
+        mLoss = LossFunctions.LossFunction.MSE.getILossFunction();
+        mActivation = Activation.IDENTITY.getActivationFunction();
     }
     
     
     @Override
     public void begin() {
+        mTotalScore = 0;
     }
 
     @Override
-    public AudioDCTData process(AudioDCTData input) {
-        INDArray inputArray = Nd4j.create(input.mSamples);
-
+    public MagnitudeSpectrum process(MagnitudeSpectrum sample) {
+        INDArray inputArray = Nd4j.create(sample.mMagnitude.length);
+        for (int j = 0; j < sample.mMagnitude.length; j++) {
+            double x = sample.mMagnitude[j] / 170;
+            //x = (x >= 0) ? Math.sqrt(x) : -Math.sqrt(-x);
+            inputArray.putScalar(j, x);
+        }
+        
+        
         // Activate the autoencoder to get the result.
         INDArray outputArray = mModel.activateSelectedLayers(0, mModel.getnLayers()-1, inputArray);
         
-        AudioDCTData output = new AudioDCTData();
-        output.mSamples = new double[input.mSamples.length];
-        for (int i = 0; i < input.mSamples.length; i++) {
-            output.mSamples[i] = outputArray.getDouble(i);
+        double score = mLoss.computeScore(inputArray, outputArray, mActivation, null, false);
+        mTotalScore += score;
+        
+        MagnitudeSpectrum output = new MagnitudeSpectrum();
+        output.mMagnitude = new double[sample.mMagnitude.length];
+        output.mPhase = new double[sample.mMagnitude.length];
+        for (int j = 0; j < sample.mMagnitude.length; j++) {
+            double x = outputArray.getDouble(j) * 170;
+            //x = (x >= 0) ? (x*x) : -(x*x);
+            output.mMagnitude[j] = x;
+            output.mPhase[j] = sample.mPhase[j];
         }
         
         return output;
@@ -47,6 +70,7 @@ public class AutoEncoderProcessor implements IProcessor<AudioDCTData, AudioDCTDa
 
     @Override
     public void end() {
+        System.out.println("Total score of result is " + mTotalScore);
     }
     
 }

@@ -12,8 +12,6 @@ import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.ensor.fftmusings.io.ICloseableIterator;
-import org.ensor.fftmusings.pca.PCAFactory;
-import org.ensor.fftmusings.pca.PCATransformer;
 import org.ensor.fftmusings.pipeline.ChannelSelector;
 import org.ensor.fftmusings.pipeline.Pipeline;
 

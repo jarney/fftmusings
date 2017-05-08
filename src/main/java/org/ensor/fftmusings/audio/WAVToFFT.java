@@ -5,21 +5,26 @@
  */
 package org.ensor.fftmusings.audio;
 
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import org.ensor.fftmusings.pipeline.ChannelDuplicator;
+import org.ensor.fftmusings.io.ICloseableIterator;
+import org.ensor.fftmusings.pipeline.ChannelSelector;
 import org.ensor.fftmusings.pipeline.Pipeline;
 
 /**
  *
  * @author jona
  */
-public class DCTToWAV {
+public class WAVToFFT {
     public static void main(String[] args) throws Exception {
         
-        String inputDirectory = "data/dct";
-        String outputDirectory = "data/wav2";
+        int sampleSize = 512;
+        String inputDirectory = "data/wav";
+        String outputDirectory = "data/fft";
         
         // Creating a pool of 16 threads to consume 8 cores.
         // About half the time spent processing is IO bound, so 16 threads
@@ -32,7 +37,7 @@ public class DCTToWAV {
             System.out.println("Input " + inputFile.getAbsolutePath());
             System.out.println("Output " + outputFile.getAbsolutePath());
         
-            executor.execute(new DCTProcess(inputFile, outputFile));
+            executor.execute(new FFTProcess(inputFile, outputFile, sampleSize));
         }
         
         executor.shutdown();
@@ -42,25 +47,31 @@ public class DCTToWAV {
         System.out.println("Finished processing");
     }
     
-    static class DCTProcess implements Runnable {
+    static class FFTProcess implements Runnable {
         
+        private final int mSampleSize;
         private final String mInputFilename;
         private final String mOutputFilename;
         
         
-        public DCTProcess(File inputFile, File outputFile) {
+        public FFTProcess(File inputFile, File outputFile, int sampleSize) {
+            mSampleSize = sampleSize;
             mInputFilename = inputFile.getAbsolutePath();
-            mOutputFilename = outputFile.getAbsolutePath().replace(".dct", ".wav");
+            mOutputFilename = outputFile.getAbsolutePath().replace(".wav", ".fft");
         }
         
         public void run() {
+            int fftWindowSize = mSampleSize*2;
             System.out.println("Starting " + mInputFilename);
-            
-            try (DCT.Reader wavFileIterator = DCT.createReader(mInputFilename)) {
-                new Pipeline(new DCT.Reverse(false))
-                    .add(new ChannelDuplicator(AudioSample.class, 2))
-                    .add(WAVFileWriter.create(mOutputFilename))
-                    .execute(wavFileIterator);
+            try (ICloseableIterator<AudioSample[]> wavFileIterator = WAVFileIterator.create(mInputFilename, mSampleSize)) {
+                try (OutputStream os = new FileOutputStream(mOutputFilename)) {
+                    try (DataOutputStream dos = new DataOutputStream(os)) {
+                        new Pipeline(new ChannelSelector(AudioSample.class, 0))
+                                .add(new FFTOverlap.Forward(fftWindowSize))
+                                .add(new FFTOverlap.Write(dos))
+                                .execute(wavFileIterator);
+                    }
+                }
             }
             catch (Exception ex) {
                 throw new RuntimeException("Could not process file " + mInputFilename, ex);

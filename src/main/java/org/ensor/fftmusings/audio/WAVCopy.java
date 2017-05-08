@@ -19,7 +19,7 @@ public class WAVCopy {
     public static void main(String[] args) throws Exception {
         args = new String[2];
         args[0] = "data/wav/20.wav";
-        args[1] = "sample.wav";
+        args[1] = "vocoder-test.wav";
         
         if (args.length != 2) {
             System.out.println("Usage: WAVToSample foo.wav foo2.wav");
@@ -31,8 +31,13 @@ public class WAVCopy {
         
         try (ICloseableIterator<AudioSample[]> wavFileIterator = WAVFileIterator.create(args[0], audioSampleSize)) {
             new Pipeline(new ChannelSelector(AudioSample.class, 0))
-                    .add(new PhaseVocoder.Encoder(11025, new FFTOverlap.Forward(fftWindowSize)))
-                    .add(new PhaseVocoder.Decoder(11025, new FFTOverlap.Reverse(fftWindowSize)))
+//                    .add(new PhaseVocoder.Encoder(11025, new FFTOverlap.ForwardPhaseDelta(fftWindowSize)))
+//                    .add(new PhaseVocoder.Decoder(11025, new FFTOverlap.ReversePhaseDelta(fftWindowSize)))
+                    .add(new FFTOverlap.Forward(fftWindowSize))
+                    .add(new FFTToPNG("fft-mixed.png", false, true))
+                    .add(new FFTToPNG("fft-magnitude.png", false))
+                    .add(new FFTToPNG("fft-phase.png", true))
+                    .add(new FFTOverlap.Reverse(fftWindowSize))
                     .add(new ChannelDuplicator(AudioSample.class, 2))
                     .add(WAVFileWriter.create("vocode-test.wav"))
                     .execute(wavFileIterator);
