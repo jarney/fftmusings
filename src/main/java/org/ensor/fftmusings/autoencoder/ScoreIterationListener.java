@@ -41,9 +41,9 @@ public class ScoreIterationListener implements IterationListener {
         invoke();
         double result = model.score();
         long currentTime = System.currentTimeMillis();
-//        if ((iterCount % 4) == 0) {
+        //if ((iterCount % 4) == 0) {
             logWriter.println("Score at iteration " + iterCount + " is " + result + " took " + (currentTime - lastSampleTime) + " ms");
-//        }
+        //}
         lastSampleTime = currentTime;
     }
 }

@@ -4,7 +4,10 @@
  */
 package org.ensor.fftmusings.mdn;
 
+import java.util.Random;
 import org.apache.commons.math3.util.Pair;
+import org.ensor.fftmusings.statistics.GaussianDistribution;
+import org.ensor.fftmusings.statistics.GaussianMixture;
 import org.nd4j.linalg.activations.IActivation;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
@@ -76,8 +79,29 @@ public class MixtureDensityCost implements ILossFunction {
         mdc.mu = Nd4j.zeros(nSamples, nLabelsPerSample, nMixturesPerLabel);
         mdc.sigma = Nd4j.zeros(nSamples, nLabelsPerSample, nMixturesPerLabel);
 
+        // Output is 2 dimensional (samples, labels)
+        //
+        // Reorganize these.
+        // alpha = samples, 0-output/3
+        // mu = samples, output/3-output*2/3
+        // sigma = samples, output*2/3-output
+        // Alpha is then sub-divided by mixtures per label and samples.
+
+// TODO: Make sure this is right.
+//        INDArray pa2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(0, nMixturesPerLabel*nLabelsPerSample));
+//        INDArray pm2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample, nMixturesPerLabel*nLabelsPerSample*2));
+//        INDArray ps2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample*2, nMixturesPerLabel*nLabelsPerSample*3));
+//        mdc.alpha.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pa2);
+//        mdc.mu.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pm2);
+//        mdc.sigma.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, ps2);
+//        mdc.alpha = mdc.alpha.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
+//        mdc.mu = mdc.mu.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
+//        mdc.sigma = mdc.sigma.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
+//        TODO: Reshape these arrays from (samples, labels*mixtures) to (samples, labels, mixtures)
+                
         for (int j = 0; j < nLabelsPerSample; j++) {
             for (int k = 0; k < nMixturesPerLabel; k++) {
+                
                 INDArray pa = output.get(NDArrayIndex.all(), NDArrayIndex.point(getAlphaIndex(j, k, nMixturesPerLabel)));
                 INDArray pm = output.get(NDArrayIndex.all(), NDArrayIndex.point(getMuIndex(j, k, nMixturesPerLabel)));
                 INDArray ps = output.get(NDArrayIndex.all(), NDArrayIndex.point(getSigmaIndex(j, k, nMixturesPerLabel)));
@@ -133,10 +157,34 @@ public class MixtureDensityCost implements ILossFunction {
         return output;
     }
     
-    
     public MixtureDensityCost(int aMixturesPerLabel, int aLabelsPerSample) {
         mMixturesPerLabel = aMixturesPerLabel;
         mLabelsPerSample = aLabelsPerSample;
+    }
+    
+    /**
+     * Sample from the network output.
+     * @param networkOutput
+     * @return 
+     */
+    public INDArray sampleFromNetwork(Random rng, INDArray networkOutput) {
+        MixtureDensityComponents mdc = extractComponents(networkOutput, 1, mLabelsPerSample, mMixturesPerLabel);
+        INDArray o = Nd4j.zeros(mLabelsPerSample);
+        
+        for (int i = 0; i < mLabelsPerSample; i++) {
+            GaussianMixture mixture = new GaussianMixture();
+            for (int j = 0; j < mMixturesPerLabel; j++) {
+                double alpha = mdc.alpha.getDouble(0, i, j);
+                double mu = mdc.mu.getDouble(0, i, j);
+                double sigma = mdc.sigma.getDouble(0, i, j);
+                GaussianDistribution d = new GaussianDistribution(mu, sigma);
+                mixture.addDistribution(alpha, d);
+            }
+            o.putScalar(i, mixture.sample(rng));
+        }
+        
+        
+        return o;
     }
     
     /**
@@ -241,6 +289,20 @@ public class MixtureDensityCost implements ILossFunction {
         
         // Place components of gradient into gradient holder.]
         // TODO: Figure out the ND4j nonsense here.
+        // TODO, we will need to resize/shape dLdAlpha, etc to make this work.
+//        INDArray pa2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(0, nMixturesPerLabel*nLabelsPerSample));
+//        INDArray pm2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample, nMixturesPerLabel*nLabelsPerSample*2));
+//        INDArray ps2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample*2, nMixturesPerLabel*nLabelsPerSample*3));
+//        mdc.alpha.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pa2);
+//        mdc.mu.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pm2);
+//        mdc.sigma.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, ps2);
+//        mdc.alpha = mdc.alpha.reshape('f', nSamples, nLabelsPerSample * nMixturesPerLabel);
+//        mdc.mu = mdc.mu.reshape('f', nSamples, nLabelsPerSample * nMixturesPerLabel);
+//        mdc.sigma = mdc.sigma.reshape('f', nSamples, nLabelsPerSample * nMixturesPerLabel);
+//        gradient.put(NDArrayIndex.all(), NDArrayIndex.interval(0, nMixturesPerLabel*nLabelsPerSample), dLdZAlpha);
+//        gradient.put(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample, nMixturesPerLabel*nLabelsPerSample*2), dLdZMu);
+//        gradient.put(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample*2, nMixturesPerLabel*nLabelsPerSample*3), dLdZSigma);
+
         for (int i = 0; i < nSamples; i++) {
             for (int j = 0; j < nLabelsPerSample; j++) {
                 for (int k = 0; k < mMixturesPerLabel; k++) {
@@ -323,14 +385,10 @@ public class MixtureDensityCost implements ILossFunction {
         int labelsPerSample = labels.shape()[1];
         INDArray labelMinusMu = Nd4j.zeros(nSamples, labelsPerSample, mMixturesPerLabel);
         
-        for (int i = 0; i < nSamples; i++) {
-            for (int j = 0; j < labelsPerSample; j++) {
-                for (int k = 0; k < mMixturesPerLabel; k++) {
-                    labelMinusMu.putScalar(i, j, k, labels.getDouble(i, j));
-                }
-            }
+        for (int k = 0; k < mMixturesPerLabel; k++) {
+            labelMinusMu.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all(), NDArrayIndex.point(k)}, labels);
         }
-        labelMinusMu = labelMinusMu.sub(mu);
+        labelMinusMu.subi(mu);
         
         return labelMinusMu;
     }

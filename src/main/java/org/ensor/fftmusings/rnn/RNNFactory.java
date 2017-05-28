@@ -8,6 +8,7 @@ package org.ensor.fftmusings.rnn;
 import java.io.File;
 import java.io.IOException;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
+import org.deeplearning4j.nn.conf.BackpropType;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
 import org.deeplearning4j.nn.conf.Updater;
@@ -69,7 +70,7 @@ public class RNNFactory {
                                 .dist(new UniformDistribution(-0.08, 0.08)).build())
                 .pretrain(false)
                 .backprop(true)
-                .backprop(true)
+                .backpropType(BackpropType.TruncatedBPTT)
                 .build();
 
         MultiLayerNetwork net = new MultiLayerNetwork(conf);

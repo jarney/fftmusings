@@ -24,6 +24,11 @@ import org.jtransforms.dct.DoubleDCT_1D;
  * @author jona
  */
 public class DCT {
+    
+    // TODO: Scale DCT based on frequency of human sensitivity
+    // so that NN converges on a signal with similar sensitivity
+    // as that of the human hearing range.
+    
     public static class Forward implements IProcessor<AudioSample, AudioDCTData> {
 
         private DoubleDCT_1D mFFT;
@@ -65,6 +70,103 @@ public class DCT {
         }
 
     }
+    
+    static class FrequencyAttenuation {
+        public FrequencyAttenuation(double aF, double aA) {
+            a = aA;
+            f = aF;
+        }
+        public double a;
+        public double f;
+    }
+    
+    /**
+     * This doesn't actually normalize to human hearing range, but it does
+     * do some normalization in that direction.  The intent here is that
+     * the low-range signal is attenuated and the high-range signals are
+     * enhanced because that's the way human hearing works.  This does NOT
+     * attempt to do a realistic conversion to an actual decibel scale
+     * with any precision at all, this is just a slight heuristic to get
+     * better performance.
+     */
+    public static class NormalizeToHearing implements IProcessor<AudioDCTData, AudioDCTData> {
+
+        private double[] mFilter;
+        private double mSampleRate;
+        private FrequencyAttenuation[] bins;
+        
+        public NormalizeToHearing(boolean aForward, double aSampleRate) {
+            mFilter = new double[512];
+            
+            // Frequency Attenuation (dB)
+            bins = new FrequencyAttenuation[5];
+            bins[0] = new FrequencyAttenuation(0, 1);
+            bins[1] = new FrequencyAttenuation(100, .25);
+            bins[1] = new FrequencyAttenuation(500, .5);
+            bins[2] = new FrequencyAttenuation(2000, .8);
+            bins[3] = new FrequencyAttenuation(8000, 1);
+            bins[4] = new FrequencyAttenuation(13025, .1);
+            
+            mSampleRate = aSampleRate;
+            for (int i = 0; i < mFilter.length; i++) {
+                mFilter[i] = interpolateSensitivity(i);
+                if (!aForward) {
+                    mFilter[i] = 1/mFilter[i];
+                }
+            }
+        }
+        
+        int findLowFrequencyBin(double frequency) {
+            for (int i = bins.length-1; i >= 0; i--) {
+                if (frequency > bins[i].f) {
+                    return i;
+                }
+            }
+            return 0;
+        }
+        
+        private double interpolateSensitivity(int bucketId) {
+            double frequency = bucketId * mSampleRate / mFilter.length;
+            
+            // Find the nearest frequency buckets.
+            int lowBin = findLowFrequencyBin(frequency);
+            int highBin = lowBin+1;
+            
+//            System.out.println("Frequency " + frequency + ": " + lowBin + "-" + highBin);
+            
+            FrequencyAttenuation low = bins[lowBin];
+            FrequencyAttenuation high = bins[highBin];
+            
+            double attenuation = low.a + (high.a - low.a) / (high.f - low.f) * (frequency - low.f);
+            
+            
+            return attenuation;
+        }
+        
+        
+        @Override
+        public void begin() {
+        }
+
+        @Override
+        public AudioDCTData process(AudioDCTData input) {
+            // Normalize forward or reverse.
+            AudioDCTData output = new AudioDCTData();
+            output.mSamples = new double[input.mSamples.length];
+            
+            for (int i = 0; i < input.mSamples.length; i++) {
+                output.mSamples[i] = input.mSamples[i] * mFilter[i];
+            }
+            
+            return output;
+        }
+
+        @Override
+        public void end() {
+        }
+        
+    }
+    
     public static class Reverse implements IProcessor<AudioDCTData, AudioSample> {
 
         private DoubleDCT_1D mFFT;
@@ -90,13 +192,13 @@ public class DCT {
 
             AudioSample sample = new AudioSample(mSampleSize);
             System.arraycopy(input.mSamples, 0, sample.mSamples, 0, input.mSamples.length);
-            mFFT.inverse(sample.mSamples, true);
             if (mSQRTScale) {
                 for (int i = 0; i < input.mSamples.length; i++) {
                     double v = input.mSamples[i];
                     sample.mSamples[i] = (v > 0) ? (v*v) : -(v*v);
                 }
             }
+            mFFT.inverse(sample.mSamples, true);
             return sample;
         }
 
@@ -285,12 +387,12 @@ public class DCT {
 
                     d.mSamples[y] /= max;
 
-                    if (d.mSamples[y] > 0) {
-                        d.mSamples[y] = Math.sqrt(d.mSamples[y]);
-                    }
-                    else {
-                        d.mSamples[y] = -Math.sqrt(-d.mSamples[y]);
-                    }
+//                    if (d.mSamples[y] > 0) {
+//                        d.mSamples[y] = Math.sqrt(d.mSamples[y]);
+//                    }
+//                    else {
+//                        d.mSamples[y] = -Math.sqrt(-d.mSamples[y]);
+//                    }
 
                     if (d.mSamples[y] > 1.0 || d.mSamples[y] < -1.0) {
                         System.out.println("Out of bounds, need normalization " + d.mSamples[y]);

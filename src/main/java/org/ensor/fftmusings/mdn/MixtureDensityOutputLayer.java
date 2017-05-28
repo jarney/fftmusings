@@ -180,7 +180,7 @@ public class MixtureDensityOutputLayer extends BaseOutputLayer {
         @Override
         @SuppressWarnings("unchecked")
         public MixtureDensityOutputLayer build() {
-            super.activation(Activation.IDENTITY);
+            super.activation(Activation.IDENTITY.getActivationFunction());
             // The number of parameters out of the network
             // will be equal to 3 parameters per gaussian (alpha, mu, sigma)
             // multiplied by the number of gaussians per output

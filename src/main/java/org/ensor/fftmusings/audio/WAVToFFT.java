@@ -11,6 +11,7 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.ensor.fftmusings.autoencoder.Layer;
 import org.ensor.fftmusings.io.ICloseableIterator;
 import org.ensor.fftmusings.pipeline.ChannelSelector;
 import org.ensor.fftmusings.pipeline.Pipeline;
@@ -29,11 +30,13 @@ public class WAVToFFT {
         // Creating a pool of 16 threads to consume 8 cores.
         // About half the time spent processing is IO bound, so 16 threads
         // should keep 8 cores busy.
-        ExecutorService executor = Executors.newFixedThreadPool(16);
+        ExecutorService executor = Executors.newFixedThreadPool(8);
         
         File dir = new File(inputDirectory);
         for (File inputFile : dir.listFiles()) {
             File outputFile = new File(outputDirectory + File.separator + inputFile.getName());
+            //File inputFile = new File("data/wav/20.wav");
+            //File outputFile = new File("sample.wav");
             System.out.println("Input " + inputFile.getAbsolutePath());
             System.out.println("Output " + outputFile.getAbsolutePath());
         
@@ -52,12 +55,14 @@ public class WAVToFFT {
         private final int mSampleSize;
         private final String mInputFilename;
         private final String mOutputFilename;
+        private final String mPNGFilename;
         
         
         public FFTProcess(File inputFile, File outputFile, int sampleSize) {
             mSampleSize = sampleSize;
             mInputFilename = inputFile.getAbsolutePath();
             mOutputFilename = outputFile.getAbsolutePath().replace(".wav", ".fft");
+            mPNGFilename = outputFile.getAbsolutePath().replace(".wav", ".png");
         }
         
         public void run() {
@@ -68,6 +73,10 @@ public class WAVToFFT {
                     try (DataOutputStream dos = new DataOutputStream(os)) {
                         new Pipeline(new ChannelSelector(AudioSample.class, 0))
                                 .add(new FFTOverlap.Forward(fftWindowSize))
+                                .add(new FFTOverlap.NormalizeToHearing(true, 11025.0))
+                                .add(new Layer.FFTToINDArray())
+                                .add(new Layer.ToFFTPNG(mPNGFilename, true))
+                                .add(new Layer.INDArrayToFFT())
                                 .add(new FFTOverlap.Write(dos))
                                 .execute(wavFileIterator);
                     }

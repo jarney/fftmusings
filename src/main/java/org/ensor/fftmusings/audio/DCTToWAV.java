@@ -28,6 +28,7 @@ public class DCTToWAV {
         
         File dir = new File(inputDirectory);
         for (File inputFile : dir.listFiles()) {
+            if (inputFile.getName().endsWith(".png")) continue;
             File outputFile = new File(outputDirectory + File.separator + inputFile.getName());
             System.out.println("Input " + inputFile.getAbsolutePath());
             System.out.println("Output " + outputFile.getAbsolutePath());
@@ -57,7 +58,8 @@ public class DCTToWAV {
             System.out.println("Starting " + mInputFilename);
             
             try (DCT.Reader wavFileIterator = DCT.createReader(mInputFilename)) {
-                new Pipeline(new DCT.Reverse(false))
+                new Pipeline(new DCT.NormalizeToHearing(false, 11025.0))
+                    .add(new DCT.Reverse(true))
                     .add(new ChannelDuplicator(AudioSample.class, 2))
                     .add(WAVFileWriter.create(mOutputFilename))
                     .execute(wavFileIterator);

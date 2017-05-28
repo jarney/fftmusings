@@ -19,14 +19,14 @@ import org.nd4j.linalg.lossfunctions.LossFunctions;
  *
  * @author jona
  */
-public class AutoEncoderProcessor implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum> {
+public class FFTAutoEncoderProcessor implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum> {
 
     private final MultiLayerNetwork mModel;
     private final ILossFunction mLoss;
     private final IActivation mActivation;
     private double mTotalScore;
     
-    public AutoEncoderProcessor(MultiLayerNetwork model) {
+    public FFTAutoEncoderProcessor(MultiLayerNetwork model) {
         mModel = model;
         mLoss = LossFunctions.LossFunction.MSE.getILossFunction();
         mActivation = Activation.IDENTITY.getActivationFunction();
@@ -40,11 +40,17 @@ public class AutoEncoderProcessor implements IProcessor<MagnitudeSpectrum, Magni
 
     @Override
     public MagnitudeSpectrum process(MagnitudeSpectrum sample) {
-        INDArray inputArray = Nd4j.create(sample.mMagnitude.length);
+        INDArray inputArray = Nd4j.create(sample.mMagnitude.length*2);
         for (int j = 0; j < sample.mMagnitude.length; j++) {
-            double x = sample.mMagnitude[j] / 170;
-            //x = (x >= 0) ? Math.sqrt(x) : -Math.sqrt(-x);
-            inputArray.putScalar(j, x);
+            double r = sample.mMagnitude[j];
+            double p = sample.mPhase[j];
+            //r = r / 170.0;
+            //r = Math.sqrt(r);
+            double x = r * Math.cos(p);
+            double y = r * Math.sin(p);
+            
+            inputArray.putScalar(j*2, x);
+            inputArray.putScalar(j*2+1, y);
         }
         
         
@@ -58,10 +64,14 @@ public class AutoEncoderProcessor implements IProcessor<MagnitudeSpectrum, Magni
         output.mMagnitude = new double[sample.mMagnitude.length];
         output.mPhase = new double[sample.mMagnitude.length];
         for (int j = 0; j < sample.mMagnitude.length; j++) {
-            double x = outputArray.getDouble(j) * 170;
-            //x = (x >= 0) ? (x*x) : -(x*x);
-            output.mMagnitude[j] = x;
+            double x = outputArray.getDouble(j*2);
+            double y = outputArray.getDouble(j*2+1);
+
             output.mPhase[j] = sample.mPhase[j];
+            double r = Math.sqrt(x*x + y*y);
+            //r = r*r;
+            //r *= 170.0;
+            output.mMagnitude[j] = r;
         }
         
         return output;

@@ -5,6 +5,8 @@
  */
 package org.ensor.fftmusings.audio;
 
+import org.ensor.fftmusings.audio.windows.HammingWindow;
+import org.ensor.fftmusings.audio.windows.BlackmanHarrisWindow;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
@@ -31,12 +33,18 @@ public class FFTOverlap {
         public MagnitudeSpectrum process(AudioSample input) {
             MagnitudeSpectrum magnitudeSpectrum = super.process(input);
             for (int i = 0; i < magnitudeSpectrum.mPhase.length; i++) {
-                double delta = magnitudeSpectrum.mPhase[i] - mLastPhase[i];
+                double thisPhase = magnitudeSpectrum.mPhase[i];
+                double delta = thisPhase - mLastPhase[i];
                 while (delta > Math.PI) {delta = delta - TWO_PI;}
                 while (delta < -Math.PI) {delta = delta + TWO_PI;}
                 magnitudeSpectrum.mPhase[i] = delta;
+                mLastPhase[i] = thisPhase;
             }
             return magnitudeSpectrum;
+        }
+
+        public void process(MagnitudeSpectrum currentSample) {
+            throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
         }
     }
     public static class ReversePhaseDelta extends Reverse {
@@ -47,10 +55,12 @@ public class FFTOverlap {
         }
         public AudioSample process(MagnitudeSpectrum input) {
             for (int i = 0; i < input.mPhase.length; i++) {
-                double phase = input.mPhase[i] + mLastPhase[i];
-                while (phase > 2*Math.PI) {phase = phase - TWO_PI;}
+                double thisPhaseDelta = input.mPhase[i];
+                double phase = mLastPhase[i] + thisPhaseDelta;
+                while (phase > TWO_PI) {phase = phase - TWO_PI;}
                 while (phase < 0) {phase = phase + TWO_PI;}
                 input.mPhase[i] = phase;
+                mLastPhase[i] = phase;
             }
             AudioSample output = super.process(input);
             return output;
@@ -103,13 +113,13 @@ public class FFTOverlap {
             // Input signal is the previous sample concatenated
             // with the current signal.
             for (int i = 0; i < mLastSample.size(); i++) {
-                double v = mLastSample.mSamples[i];// * mWindow[i];
+                double v = mLastSample.mSamples[i] * mWindow[i];
                 fftData[i*2] = v;
                 fftData[i*2+1] = 0;
             }
             int offset = mLastSample.size();
             for (int i = 0; i < input.size(); i++) {
-                double v = input.mSamples[i];// * mWindow[i+offset];
+                double v = input.mSamples[i] * mWindow[i+offset];
                 fftData[(i + offset)*2] = v;
                 fftData[(i + offset)*2+1] = 0;
             }
@@ -163,14 +173,12 @@ public class FFTOverlap {
      */
     public static class Reverse implements IProcessor<MagnitudeSpectrum, AudioSample> {
         private final DoubleFFT_1D mFFT;
-        private final double[] mWindow;
         private final int mFFTWindowSize;
         private double[] xn;
 
         public Reverse(int fftWindowSize) {
             mFFTWindowSize = fftWindowSize;
             mFFT = new DoubleFFT_1D(mFFTWindowSize);
-            mWindow = HammingWindow.compute(mFFTWindowSize);
             xn = null;
         }
 
@@ -206,8 +214,8 @@ public class FFTOverlap {
             for (int i = 0; i < spectrum.mMagnitude.length; i++) {
                 double angle = spectrum.mPhase[i];
                 double m = spectrum.mMagnitude[i];
-                fftBuffer[i*2] = m/2 * Math.cos(angle);
-                fftBuffer[i*2+1] = m/2 * Math.sin(angle);
+                fftBuffer[i*2] = m * Math.cos(angle);
+                fftBuffer[i*2+1] = m * Math.sin(angle);
             }
             // Next, we reconstruct the top-half of the FFT
             // from the fact that it is the complex
@@ -258,8 +266,6 @@ public class FFTOverlap {
         @Override
         public void end() {
         }
-
-
     }
     public static class Write implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum> {
         private DataOutputStream mDOS;
@@ -296,6 +302,53 @@ public class FFTOverlap {
             }
         }
     }
+    public static class PhaseUnwrapper implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum> {
+
+        @Override
+        public void begin() {
+        }
+
+        @Override
+        public MagnitudeSpectrum process(MagnitudeSpectrum input) {
+            
+            int phaseNumber = 0;
+
+            MagnitudeSpectrum unwrapped = new MagnitudeSpectrum();
+            unwrapped.mPhase = new double[input.mPhase.length];
+            unwrapped.mMagnitude = input.mMagnitude;
+            
+            for (int k = 0; k < input.mPhase.length; k++) {
+                if (k > 0 && input.mPhase[k] > input.mPhase[k-1]) {
+                    phaseNumber--;
+                }
+                unwrapped.mPhase[k] = input.mPhase[k] + phaseNumber * Math.PI*2;
+            }
+            return unwrapped;
+        }
+
+        @Override
+        public void end() {
+        }
+    }
+    
+    public static class PhsePredictorBasicModel implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum> {
+
+        @Override
+        public void begin() {
+        }
+
+        @Override
+        public MagnitudeSpectrum process(MagnitudeSpectrum input) {
+            return input;
+        }
+
+        @Override
+        public void end() {
+        }
+       
+    }
+    
+    
     public static Reader createReader(String inputFile) throws FileNotFoundException {
         FileInputStream fis = new FileInputStream(inputFile);
         DataInputStream dis = new DataInputStream(fis);
@@ -361,6 +414,104 @@ public class FFTOverlap {
         @Override
         public void close() throws IOException {
             mStream.close();
+        }
+        
+    }
+    /**
+     * This doesn't actually normalize to human hearing range, but it does
+     * do some normalization in that direction.  The intent here is that
+     * the low-range signal is attenuated and the high-range signals are
+     * enhanced because that's the way human hearing works.  This does NOT
+     * attempt to do a realistic conversion to an actual decibel scale
+     * with any precision at all, this is just a slight heuristic to get
+     * better performance.
+     */
+    public static class NormalizeToHearing implements IProcessor<MagnitudeSpectrum, MagnitudeSpectrum> {
+
+        private double[] mFilter;
+        private double mSampleRate;
+        private boolean mForward;
+        private DCT.FrequencyAttenuation[] bins;
+        
+        public NormalizeToHearing(boolean aForward, double aSampleRate) {
+            
+            mForward = aForward;
+            mFilter = new double[512];
+            
+            // Frequency Attenuation (dB)
+            bins = new DCT.FrequencyAttenuation[5];
+            bins[0] = new DCT.FrequencyAttenuation(0, 1);
+            bins[1] = new DCT.FrequencyAttenuation(100, .25);
+            bins[1] = new DCT.FrequencyAttenuation(500, .5);
+            bins[2] = new DCT.FrequencyAttenuation(2000, .8);
+            bins[3] = new DCT.FrequencyAttenuation(8000, 1);
+            bins[4] = new DCT.FrequencyAttenuation(13025, .1);
+            
+            mSampleRate = aSampleRate;
+            for (int i = 0; i < mFilter.length; i++) {
+                mFilter[i] = interpolateSensitivity(i);
+                if (!aForward) {
+                    mFilter[i] = 1/mFilter[i];
+                }
+            }
+        }
+        
+        int findLowFrequencyBin(double frequency) {
+            for (int i = bins.length-1; i >= 0; i--) {
+                if (frequency > bins[i].f) {
+                    return i;
+                }
+            }
+            return 0;
+        }
+        
+        private double interpolateSensitivity(int bucketId) {
+            double frequency = bucketId * mSampleRate / mFilter.length;
+            
+            // Find the nearest frequency buckets.
+            int lowBin = findLowFrequencyBin(frequency);
+            int highBin = lowBin+1;
+            
+//            System.out.println("Frequency " + frequency + ": " + lowBin + "-" + highBin);
+            
+            DCT.FrequencyAttenuation low = bins[lowBin];
+            DCT.FrequencyAttenuation high = bins[highBin];
+            
+            double attenuation = low.a + (high.a - low.a) / (high.f - low.f) * (frequency - low.f);
+            
+            
+            return attenuation;
+        }
+        
+        
+        @Override
+        public void begin() {
+        }
+
+        @Override
+        public MagnitudeSpectrum process(MagnitudeSpectrum input) {
+            // Normalize forward or reverse.
+            MagnitudeSpectrum output = new MagnitudeSpectrum();
+            output.mMagnitude = new double[input.mMagnitude.length];
+            output.mPhase = input.mPhase;
+            
+            for (int i = 0; i < input.mMagnitude.length; i++) {
+                output.mMagnitude[i] = input.mMagnitude[i];
+                if (mForward) {
+                    output.mMagnitude[i] = Math.sqrt(output.mMagnitude[i]);
+                    output.mMagnitude[i] *= mFilter[i];
+                }
+                else {
+                    output.mMagnitude[i] *= mFilter[i];
+                    output.mMagnitude[i] = output.mMagnitude[i] * output.mMagnitude[i];
+                }
+            }
+            
+            return output;
+        }
+
+        @Override
+        public void end() {
         }
         
     }
