@@ -39,17 +39,35 @@ import org.nd4j.linalg.ops.transforms.Transforms;
  * matches the number of mixtures provided in the constructor for the
  * cost function.
  * 
- * @author jona
+ * @author jarney
  */
 public class MixtureDensityCost implements ILossFunction {
 
     private final int mMixturesPerLabel;
     private final int mLabelsPerSample;
-    private static final int mOutputPerGaussian = 3;
+    private static final double SQRT_TWO_PI = Math.sqrt(2*Math.PI);
+    
+    /**
+     * This method constructs a mixture density cost function
+     * which causes the network to learn a mixture of gaussian distributions
+     * for each network output.  The network will learn the 'alpha' (weight
+     * for each distribution), the 'mu' or 'mean' of each distribution,
+     * and the 'sigma' (standard-deviation) of the mixture.  Together,
+     * this distribution can be sampled according to the probability density
+     * learned by the network.
+     */
+    public MixtureDensityCost(int aMixturesPerLabel, int aLabelsPerSample) {
+        mMixturesPerLabel = aMixturesPerLabel;
+        mLabelsPerSample = aLabelsPerSample;
+    }
     
     /**
      * This class is a data holder for the mixture density
      * components for convenient manipulation.
+     * These are organized as rank-3 matrices with shape
+     * [nSamples, nLabelsPerSample, nMixturesPerLabel]
+     * and refer to the 'alpha' (weight of that gaussian), 'mu' (mean for that
+     * gaussian), and 'sigma' (standard-deviation for that gaussian).
      */
     public static class MixtureDensityComponents {
         public INDArray alpha;
@@ -57,18 +75,6 @@ public class MixtureDensityCost implements ILossFunction {
         public INDArray sigma;
     }
 
-    // Index variable helpers.
-    private static int getAlphaIndex(int labelNumber, int mixtureNumber, int mixturesPerLabel) {
-        return (labelNumber*mixturesPerLabel + mixtureNumber)*mOutputPerGaussian;
-    }
-    private static int getMuIndex(int labelNumber, int mixtureNumber, int mixturesPerLabel) {
-        return (labelNumber*mixturesPerLabel + mixtureNumber)*mOutputPerGaussian+1;
-    }
-    private static int getSigmaIndex(int labelNumber, int mixtureNumber, int mixturesPerLabel) {
-        return (labelNumber*mixturesPerLabel + mixtureNumber)*mOutputPerGaussian+2;
-    }
-
-    
     // This method extracts the "alpha", "mu", and "sigma" from the
     // output of the neural network.
     // This is done manually, but it should ultimately be done
@@ -78,43 +84,28 @@ public class MixtureDensityCost implements ILossFunction {
         mdc.alpha = Nd4j.zeros(nSamples, nLabelsPerSample, nMixturesPerLabel);
         mdc.mu = Nd4j.zeros(nSamples, nLabelsPerSample, nMixturesPerLabel);
         mdc.sigma = Nd4j.zeros(nSamples, nLabelsPerSample, nMixturesPerLabel);
-
+        
         // Output is 2 dimensional (samples, labels)
         //
         // Reorganize these.
         // alpha = samples, 0-output/3
         // mu = samples, output/3-output*2/3
         // sigma = samples, output*2/3-output
-        // Alpha is then sub-divided by mixtures per label and samples.
+        // Alpha is then sub-divided through reshape by mixtures per label and samples.
 
-// TODO: Make sure this is right.
-//        INDArray pa2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(0, nMixturesPerLabel*nLabelsPerSample));
-//        INDArray pm2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample, nMixturesPerLabel*nLabelsPerSample*2));
-//        INDArray ps2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample*2, nMixturesPerLabel*nLabelsPerSample*3));
-//        mdc.alpha.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pa2);
-//        mdc.mu.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pm2);
-//        mdc.sigma.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, ps2);
-//        mdc.alpha = mdc.alpha.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
-//        mdc.mu = mdc.mu.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
-//        mdc.sigma = mdc.sigma.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
-//        TODO: Reshape these arrays from (samples, labels*mixtures) to (samples, labels, mixtures)
-                
-        for (int j = 0; j < nLabelsPerSample; j++) {
-            for (int k = 0; k < nMixturesPerLabel; k++) {
-                
-                INDArray pa = output.get(NDArrayIndex.all(), NDArrayIndex.point(getAlphaIndex(j, k, nMixturesPerLabel)));
-                INDArray pm = output.get(NDArrayIndex.all(), NDArrayIndex.point(getMuIndex(j, k, nMixturesPerLabel)));
-                INDArray ps = output.get(NDArrayIndex.all(), NDArrayIndex.point(getSigmaIndex(j, k, nMixturesPerLabel)));
-                mdc.alpha.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.point(j), NDArrayIndex.point(k)}, pa);
-                mdc.mu.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.point(j), NDArrayIndex.point(k)}, pm);
-                mdc.sigma.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.point(j), NDArrayIndex.point(k)}, ps);
-            }
-        }
-        
-        // The alpha are extracted from the Zi of the network
-        // using a softmax transformation to ensure that
-        // they sum to 1 and are positive-definite.
-        mdc.alpha = softmax(nSamples, nLabelsPerSample, nMixturesPerLabel, mdc.alpha);
+        INDArray pa2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(0, nMixturesPerLabel*nLabelsPerSample));
+        INDArray pm2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample, nMixturesPerLabel*nLabelsPerSample*2));
+        INDArray ps2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample*2, nMixturesPerLabel*nLabelsPerSample*3));
+        mdc.alpha.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pa2);
+        mdc.mu.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pm2);
+        mdc.sigma.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, ps2);
+        mdc.alpha = mdc.alpha.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
+        mdc.mu = mdc.mu.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
+        mdc.sigma = mdc.sigma.reshape('f', nSamples, nLabelsPerSample, nMixturesPerLabel);
+
+        // Alpha is a softmax because
+        // the alpha should all sum to 1 for a given gaussian mixture.
+        mdc.alpha = softmax(nMixturesPerLabel, mdc.alpha);
         
         // Mu comes directly from the network as an unmolested value.
         // Note that this effectively means that the output layer of
@@ -131,35 +122,20 @@ public class MixtureDensityCost implements ILossFunction {
     }
     
     /**
-     * TODO: Find a much more elegant way of performing this operation.
-     * @param nSamples
-     * @param nLabelsPerSample
-     * @param nMixturesPerLabel
-     * @param input
-     * @return 
+     * This is a 'softmax' where each output yi = e^x divided by
+     * the sum of all 'sum(yi)'.
+     * @param nMixturesPerLabel Number of gaussian mixtures for each label.
+     * @param input Input alpha to softmax on.
+     * @return The softmax of the input (as a rank-3 tensor where the 
+     *         shape is [nSamples, nLabelsPerSample, nMixturesPerLabel].
      */
-    private static INDArray softmax(int nSamples, int nLabelsPerSample, int nMixturesPerLabel, INDArray input) {
-        INDArray output = Nd4j.zeros(nSamples, nLabelsPerSample, nMixturesPerLabel);
-        for (int i = 0; i < nSamples; i++) {
-            for (int j = 0; j < nLabelsPerSample; j++) {
-                double smsum = 0;
-                for (int k = 0; k < nMixturesPerLabel; k++) {
-                    double a = Math.exp(input.getDouble(new int[]{i,j,k}));
-                    smsum += a;
-                }
-                for (int k = 0; k < nMixturesPerLabel; k++) {
-                    double a = input.getDouble(new int[]{i,j,k});
-                    a = Math.exp(a);
-                    output.putScalar(new int[]{i,j,k}, a/smsum);
-                }
-            }
+    private static INDArray softmax(int nMixturesPerLabel, INDArray input) {
+        INDArray output = Transforms.exp(input);
+        INDArray expsum = output.sum(2);
+        for (int k = 0; k < nMixturesPerLabel; k++) {
+            output.get(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all(), NDArrayIndex.point(k)}).divi(expsum);
         }
         return output;
-    }
-    
-    public MixtureDensityCost(int aMixturesPerLabel, int aLabelsPerSample) {
-        mMixturesPerLabel = aMixturesPerLabel;
-        mLabelsPerSample = aLabelsPerSample;
     }
     
     /**
@@ -189,13 +165,16 @@ public class MixtureDensityCost implements ILossFunction {
     
     /**
      * Computes the aggregate score as a sum of all of the individual scores of
-     * each of the labels against each of the outputs of the network.
-     * @param labels
-     * @param preOutput
-     * @param activationFn
-     * @param mask
-     * @param average
-     * @return 
+     * each of the labels against each of the outputs of the network.  For
+     * the mixture density network, this is the negative log likelihood that
+     * the given labels fall within the probability distribution described by
+     * the mixture of gaussians of the network output.
+     * @param labels Labels to score against the network.
+     * @param preOutput Output of the network (before activation function has been called).
+     * @param activationFn Activation function for the network.
+     * @param mask Mask to be applied to labels (not used for MDN).
+     * @param average Whether or not to return an average instead of a total score (not used).
+     * @return Returns a single double which corresponds to the total score of all label values.
      */
     @Override
     public double computeScore(INDArray labels, INDArray preOutput, IActivation activationFn, INDArray mask, boolean average) {
@@ -259,7 +238,7 @@ public class MixtureDensityCost implements ILossFunction {
         
         INDArray gradient = Nd4j.zeros(nSamples, preOutput.columns());
 
-        INDArray labelsMinusMu = labelsMinusMu(labels, mdc.mu); // CHECK
+        INDArray labelsMinusMu = labelsMinusMu(labels, mdc.mu);
         
         INDArray phi = phi(labelsMinusMu, mdc.sigma);
 
@@ -267,13 +246,9 @@ public class MixtureDensityCost implements ILossFunction {
         // TODO: Figure out the Nd4j index nonsense
         // for better efficiency here.
         INDArray pi = phi.mul(mdc.alpha);
-        INDArray piDivisor = pi.sum(2); // CHECK
-        for (int i = 0; i < nSamples; i++) {
-            for (int j = 0; j < nLabelsPerSample; j++) {
-                for (int k = 0; k < mMixturesPerLabel; k++) {
-                    pi.putScalar(i, j, k, pi.getDouble(i, j, k)/piDivisor.getDouble(i, j));
-                }
-            }
+        INDArray piDivisor = pi.sum(2);
+        for (int k = 0; k < mMixturesPerLabel; k++) {
+            pi.get(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all(), NDArrayIndex.point(k)}).divi(piDivisor);
         }
         
         INDArray variance = mdc.sigma.mul(mdc.sigma);
@@ -287,59 +262,10 @@ public class MixtureDensityCost implements ILossFunction {
         // See Bishop equation (38)
         INDArray dLdZSigma = (diffsquared.div(variance).sub(1)).mul(-1).mul(pi);
         
-        // Place components of gradient into gradient holder.]
-        // TODO: Figure out the ND4j nonsense here.
-        // TODO, we will need to resize/shape dLdAlpha, etc to make this work.
-//        INDArray pa2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(0, nMixturesPerLabel*nLabelsPerSample));
-//        INDArray pm2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample, nMixturesPerLabel*nLabelsPerSample*2));
-//        INDArray ps2 = output.get(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample*2, nMixturesPerLabel*nLabelsPerSample*3));
-//        mdc.alpha.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pa2);
-//        mdc.mu.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, pm2);
-//        mdc.sigma.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.all()}, ps2);
-//        mdc.alpha = mdc.alpha.reshape('f', nSamples, nLabelsPerSample * nMixturesPerLabel);
-//        mdc.mu = mdc.mu.reshape('f', nSamples, nLabelsPerSample * nMixturesPerLabel);
-//        mdc.sigma = mdc.sigma.reshape('f', nSamples, nLabelsPerSample * nMixturesPerLabel);
-//        gradient.put(NDArrayIndex.all(), NDArrayIndex.interval(0, nMixturesPerLabel*nLabelsPerSample), dLdZAlpha);
-//        gradient.put(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample, nMixturesPerLabel*nLabelsPerSample*2), dLdZMu);
-//        gradient.put(NDArrayIndex.all(), NDArrayIndex.interval(nMixturesPerLabel*nLabelsPerSample*2, nMixturesPerLabel*nLabelsPerSample*3), dLdZSigma);
-
-        for (int i = 0; i < nSamples; i++) {
-            for (int j = 0; j < nLabelsPerSample; j++) {
-                for (int k = 0; k < mMixturesPerLabel; k++) {
-                    int alphaIndex = getAlphaIndex(j, k, mMixturesPerLabel);
-                    int muIndex = getMuIndex(j, k, mMixturesPerLabel);
-                    int sigmaIndex = getSigmaIndex(j, k, mMixturesPerLabel);
-                    gradient.putScalar(i, alphaIndex, dLdZAlpha.getDouble(i, j, k));
-                    gradient.putScalar(i, muIndex, dLdZMu.getDouble(i, j, k));
-                    gradient.putScalar(i, sigmaIndex, dLdZSigma.getDouble(i, j, k));
-                }
-            }
-        }
-        
-        // Manual calculation of
-        // gradient to act as a double-check
-        // of the other gradient calculation.
-        // This provides a good test of the function
-        // to make sure the calculations are correct.
-//        double dx = 0.001;
-//        INDArray l = computeScoreArray(labelsInput, preOutput, activationFn, mask);
-//        INDArray gradient2 = Nd4j.zeros(nSamples, preOutput.columns());
-//        for (int j = 0; j < mMixturesPerLabel*3; j++) {
-//            INDArray preOutputdx = preOutput.dup();
-//            for (int i = 0; i < nSamples; i++) {
-//                preOutputdx.putScalar(i, j, preOutput.getDouble(i, j)+dx);
-//            }
-//            INDArray ldL = computeScoreArray(labelsInput, preOutputdx, activationFn, mask);
-//            INDArray g1 = ldL.sub(l).div(dx);
-//            
-//            
-//            for (int i = 0; i < nSamples; i++) {
-//                gradient2.putScalar(i, j, g1.getDouble(i));
-//            }
-//            
-//        }
-        
-        
+        // Place components of gradient into gradient holder.
+        gradient.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.interval(0, mMixturesPerLabel*nLabelsPerSample)}, dLdZAlpha);
+        gradient.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.interval(mMixturesPerLabel*nLabelsPerSample, mMixturesPerLabel*nLabelsPerSample*2)}, dLdZMu);
+        gradient.put(new INDArrayIndex[]{NDArrayIndex.all(), NDArrayIndex.interval(mMixturesPerLabel*nLabelsPerSample*2, mMixturesPerLabel*nLabelsPerSample*3)}, dLdZSigma);
         
         INDArray gradients = activationFn.backprop(preOutput, gradient).getFirst();
         
@@ -370,7 +296,10 @@ public class MixtureDensityCost implements ILossFunction {
     private INDArray negativeLogLikelihood(INDArray labels, INDArray alpha, INDArray mu, INDArray sigma) {
         INDArray labelsMinusMu = labelsMinusMu(labels, mu);
         INDArray phitimesalpha = phi(labelsMinusMu, sigma).mul(alpha);
+        // phitimesalpha = See Bishop equation(22)
         INDArray phitimesalphasum = phitimesalpha.sum(2);
+        
+        // result = See Bishop(28,29)
         INDArray result = 
             Transforms.log(
                     phitimesalphasum
@@ -393,23 +322,20 @@ public class MixtureDensityCost implements ILossFunction {
         return labelMinusMu;
     }
     
+    /**
+     * This method calculates 'phi' which is the probability
+     * density function (see Bishop 23)
+     * @param labelMinusMu This is the 'x-mu' term of the Gaussian distribution (distance between 'x' and the mean value of the distribution).
+     * @param sigma This is the standard deviation of the Gaussian distribution.
+     * @return This returns an array of shape [nsamples, nlabels, ndistributions] which contains the probability density (phi) for each of the
+     *         samples * labels * distributions for the given x, sigma, mu.
+     */
     INDArray phi(INDArray labelMinusMu, INDArray sigma) {
         int[] shape = sigma.shape();
 
-        int nSamples = shape[0];
-        int labelsPerSample = shape[1];
         int nMixturesPerLabel = shape[2];
         
         Assert.isTrue(nMixturesPerLabel == mMixturesPerLabel, "Mixtures per label must be equal");
-        
-        INDArray SQRT_TWO_PI = Nd4j.zeros(nSamples, labelsPerSample, nMixturesPerLabel).add(Math.sqrt(2*Math.PI));
-
-        
-        // The following computes an array of scores, one for each
-        // of the training samples.
-        // Each score is equal to the negative log likelihood of a given label
-        // falling within the distribution.
-        // TODO: Extend from single gaussian to gaussian mixture.
         
         // 1/sqrt(2PIs^2) * e^((in-u)^2/2*s^2)
         INDArray variance = sigma.mul(sigma);
@@ -422,8 +348,7 @@ public class MixtureDensityCost implements ILossFunction {
             )
         );
 
-        // This is Sum(a_i * phi_i(x,mu,sigma))
-        // where the sum runs over all of the mixtures.
+        // This is phi_i(x,mu,sigma)
         INDArray likelihoods = 
                 exponentPart.div(normalPart);
         return likelihoods;
