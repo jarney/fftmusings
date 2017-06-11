@@ -5,7 +5,6 @@
  */
 package org.ensor.fftmusings.autoencoder;
 
-import java.io.PrintStream;
 import java.util.Iterator;
 import java.util.Random;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
@@ -22,10 +21,7 @@ import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.util.ModelSerializer;
 import org.ensor.fftmusings.audio.AudioSample;
 import org.ensor.fftmusings.audio.FFTOverlap;
-import org.ensor.fftmusings.audio.MagnitudeSpectrum;
 import org.ensor.fftmusings.audio.WAVFileWriter;
-import org.ensor.fftmusings.mdn.MixtureDensityCost;
-import org.ensor.fftmusings.mdn.MixtureDensityRNNOutputLayer;
 import org.ensor.fftmusings.pipeline.ChannelDuplicator;
 import org.ensor.fftmusings.pipeline.Pipeline;
 import org.ensor.fftmusings.statistics.GaussianDistribution;
@@ -53,14 +49,9 @@ public class RNNTrainer2 {
             System.out
         );
         
-        int mixturesPerLabel = 3;
-        int parametersPerMixture = 3;
         int labels = iter.inputColumns();
         int lstmLayerSize = 200;
         int bttLength = 50;
-        
-        MixtureDensityCost costFunction = new MixtureDensityCost(mixturesPerLabel, labels);
-        
         
         //Set up network configuration:
         MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
@@ -107,7 +98,7 @@ public class RNNTrainer2 {
         for (int epoch = 0; epoch < 300; epoch++) {
             model.fit(iter);
             iter.reset();
-            evaluateModel(model, costFunction, stackedAutoencoder, rng, epoch);
+            evaluateModel(model, stackedAutoencoder, rng, epoch);
             ModelSerializer.writeModel(model, "stack-timeseries.rnn", true);
         }
     }
@@ -117,14 +108,12 @@ public class RNNTrainer2 {
         private int mIterations = 0;
         private final MultiLayerNetwork mTimeSeriesModel;
         private final MultiLayerNetwork mStaticModel;
-        private final MixtureDensityCost mCost;
         private INDArray nextInput;
         private final Random mRNG;
         private final GaussianDistribution mGD;
 
         public RNNSampleIterator(
                 MultiLayerNetwork timeSeriesModel,
-                MixtureDensityCost cost,
                 MultiLayerNetwork staticModel,
                 int iterations,
                 INDArray initialInput,
@@ -133,7 +122,6 @@ public class RNNTrainer2 {
             mIterations = iterations;
             mStaticModel = staticModel;
             mTimeSeriesModel = timeSeriesModel;
-            mCost = cost;
             nextInput = initialInput;
             mRNG = rng;
             mGD = gd;
@@ -204,7 +192,6 @@ public class RNNTrainer2 {
     
     public static void evaluateModel(
             MultiLayerNetwork model,
-            MixtureDensityCost cost,
             MultiLayerNetwork stackedAutoencoder,
             Random rng,
             int epoch) {
@@ -224,7 +211,7 @@ public class RNNTrainer2 {
             GaussianDistribution gd = new GaussianDistribution(0, 0.0001*i);
 
             Iterator<INDArray> rnnSampleIterator = new RNNSampleIterator(
-                    model, cost, stackedAutoencoder,
+                    model, stackedAutoencoder,
                     3200, initialInput, rng,
                     gd
             );

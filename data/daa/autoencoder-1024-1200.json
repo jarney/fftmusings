@@ -1,0 +1,20 @@
+{
+    "input" : 1024,
+    "hidden" : 1200,
+    "intermediateActivation" : "SIGMOID",
+    "finalActivation" : "IDENTITY",
+    "iterations" : 1,
+    "learningRate" : 0.001,
+    "regularization" : true,
+    "l2Regularization" : 0.001,
+    "sparsity" : 0.1,
+    "updater" : "RMSPROP",
+    "weightInit" : "XAVIER",
+    "loss" : "L2",
+    "inputSource" : "iterator",
+    "epochs" : 300,
+    "minibatchSize": 100,
+    "minibatchesPerIteration" : 9000,
+    "filename" : "data/daa/model-1024-1200sparse0.01.nn"
+
+}

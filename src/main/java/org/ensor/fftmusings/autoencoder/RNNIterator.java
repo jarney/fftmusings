@@ -76,7 +76,7 @@ public class RNNIterator implements DataSetIterator {
         //Allocate space:
         int exampleLength = 200;
         INDArray input = Nd4j.zeros(new int[]{num, inputColumns(), exampleLength});
-        INDArray labels = Nd4j.zeros(new int[]{num, inputColumns(), exampleLength});
+        INDArray labels = Nd4j.zeros(new int[]{num, totalOutcomes(), exampleLength});
 
         int maxStartIdx = data.size() - exampleLength - 1;
 
@@ -89,8 +89,8 @@ public class RNNIterator implements DataSetIterator {
             for (int j = 0; j < exampleLength; j++) {
                 INDArray currentSample = data.get(j + startIdx);
                 INDArray nextSample = data.get(j + startIdx + 1);
-                input.put(new INDArrayIndex[]{NDArrayIndex.point(i), NDArrayIndex.all(), NDArrayIndex.point(j)}, currentSample);
-                labels.put(new INDArrayIndex[]{NDArrayIndex.point(i), NDArrayIndex.all(), NDArrayIndex.point(j)}, nextSample);
+                input.put(new INDArrayIndex[]{NDArrayIndex.point(i), NDArrayIndex.interval(0, inputColumns()), NDArrayIndex.point(j)}, currentSample);
+                labels.put(new INDArrayIndex[]{NDArrayIndex.point(i), NDArrayIndex.interval(0, inputColumns()), NDArrayIndex.point(j)}, nextSample);
             }
         }
         

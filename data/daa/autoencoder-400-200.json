@@ -1,0 +1,22 @@
+{
+    "input" : 400,
+    "hidden" : 200,
+    "intermediateActivation" : "SIGMOID",
+    "finalActivation" : "SIGMOID",
+    "iterations" : 1,
+    "learningRate" : 0.005,
+    "regularization" : true,
+    "l2Regularization" : 0.001,
+    "sparsity" : 0.1,
+    "updater" : "RMSPROP",
+    "weightInit" : "XAVIER",
+    "loss" : "L2",
+    "inputSource" : "iterator",
+    "epochs" : 300,
+    "minibatchSize": 100,
+    "minibatchesPerIteration" : 1250,
+    "sourceAutoencoder" : "data/daa/autoencoder-800-400.json",
+    "inputSource" : "autoencoded",
+    "filename" : "data/daa/model-400-200sparse0.01.nn"
+
+}

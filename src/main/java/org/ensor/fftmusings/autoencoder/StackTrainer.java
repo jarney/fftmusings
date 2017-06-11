@@ -46,7 +46,6 @@ public class StackTrainer {
         pretrainedLayers[2] = ModelSerializer.restoreMultiLayerNetwork("data/daa/model-800-400sparse0.01.nn");
         pretrainedLayers[3] = ModelSerializer.restoreMultiLayerNetwork("data/daa/model-400-200sparse0.01.nn");
         pretrainedLayers[4] = ModelSerializer.restoreMultiLayerNetwork("data/daa/model-200-100sparse0.01.nn");
-        pretrainedLayers[5] = ModelSerializer.restoreMultiLayerNetwork("data/daa/model-100-50sparse0.01.nn");
         
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder()
                 .seed(System.currentTimeMillis())
@@ -56,7 +55,8 @@ public class StackTrainer {
                 .updater(Updater.NESTEROVS)
                 .regularization(false)
                 .l1(0.000)
-                .learningRate(Double.parseDouble(args[0]));
+                .learningRate(0.0001);
+                //.learningRate(Double.parseDouble(args[0]));
         int layerNo = 0;
         
         NeuralNetConfiguration.ListBuilder listBuilder = builder.list()

@@ -12,11 +12,11 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <nd4j.version>0.7.2</nd4j.version>
-        <dl4j.version>0.7.2</dl4j.version>
-        <datavec.version>0.7.2</datavec.version>
-        <arbiter.version>0.7.2</arbiter.version>
-        <rl4j.version>0.7.2</rl4j.version>
+        <nd4j.version>0.8.0</nd4j.version>
+        <dl4j.version>0.8.0</dl4j.version>
+        <datavec.version>0.8.0</datavec.version>
+        <arbiter.version>0.8.0</arbiter.version>
+        <rl4j.version>0.8.0</rl4j.version>
 
         <!-- Scala binary version: DL4J's Spark and UI functionality are released with both Scala 2.10 and 2.11 support -->
         <scala.binary.version>2.11</scala.binary.version>
@@ -30,19 +30,10 @@
         <maven.minimum.version>3.3.1</maven.minimum.version>
     </properties>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.nd4j</groupId>
-                <artifactId>nd4j-x86</artifactId>
-                <version>${nd4j.version}</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>org.deeplearning4j</groupId>
-            <artifactId>deeplearning4j-nlp</artifactId>
+            <artifactId>deeplearning4j-cuda-8.0</artifactId>
             <version>${dl4j.version}</version>
         </dependency>
 
@@ -59,9 +50,15 @@
         </dependency>
         <dependency>
             <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-native-platform</artifactId>
-            <!--<artifactId>nd4j-cuda-8.0-platform</artifactId>-->
-            <version>${nd4j.version}</version>
+            <!--<artifactId>nd4j-native-platform</artifactId>-->
+            <artifactId>nd4j-cuda-8.0-platform</artifactId>
+            <version>0.8.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.nd4j</groupId>
+            <artifactId>nd4j-cuda-8.0</artifactId>
+            <version>0.8.0</version>
+            <classifier></classifier>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>

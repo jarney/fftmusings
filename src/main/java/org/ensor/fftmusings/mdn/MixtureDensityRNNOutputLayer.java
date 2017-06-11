@@ -112,7 +112,7 @@ public class MixtureDensityRNNOutputLayer extends BaseOutputLayer  {
 
 
     public static class Builder extends org.deeplearning4j.nn.conf.layers.BaseOutputLayer.Builder<Builder> {
-        private int mMixturesPerOutput = 1;
+        private int mGaussians = 1;
         
         public Builder() {
         }
@@ -121,11 +121,11 @@ public class MixtureDensityRNNOutputLayer extends BaseOutputLayer  {
          * This method configures the number of gaussian mixtures to use
          * for each output component.  Each output will be modeled as a
          * linear combination of this many gaussian functions.
-         * @param aMixturesPerOutput Number of mixtures to model for each output.
+         * @param aGaussians Number of gaussians distributions to model.
          * @return This builder again for continued use.
          */
-        public Builder mixturesPerLabel(int aMixturesPerOutput) {
-            this.mMixturesPerOutput = aMixturesPerOutput;
+        public Builder gaussians(int aGaussians) {
+            this.mGaussians = aGaussians;
             return this;
         }
 
@@ -183,15 +183,15 @@ public class MixtureDensityRNNOutputLayer extends BaseOutputLayer  {
          * @param aLoss Loss function.
          * @return Builder for continued use.
          */
-        @Override
-        public Builder lossFunction(ILossFunction aLoss) {
-            throw new IllegalArgumentException(
-                    "A Mixture density network uses " + 
-                    "a built-in loss function and will not " + 
-                    "function properly with any other" + 
-                    "loss function");
-        }
-        
+//        @Override
+//        public Builder lossFunction(ILossFunction aLoss) {
+//            throw new IllegalArgumentException(
+//                    "A Mixture density network uses " + 
+//                    "a built-in loss function and will not " + 
+//                    "function properly with any other" + 
+//                    "loss function");
+//        }
+//        
         /**
          * Setting a loss function for a mixture density output layer
          * is not supported.  The mixture density output layer comes with
@@ -222,9 +222,14 @@ public class MixtureDensityRNNOutputLayer extends BaseOutputLayer  {
             // multiplied by the number of outputs.  We also need to inform
             // the loss function about how many mixtures and outputs to
             // expect so that it can calculate the mixtures appropriately.
-            int outputs = this.nOut;
-            super.nOut(3 * mMixturesPerOutput * outputs);
-            super.lossFunction(new MixtureDensityCost(mMixturesPerOutput, outputs));
+            int labelWidth = this.nOut;
+//            super.nOut(labelWidth);
+//            super.lossFunction(LossFunctions.LossFunction.MSE);
+            super.nOut((labelWidth + 2) * mGaussians);
+            super.lossFunction(LossMixtureDensity.builder()
+                    .gaussians(mGaussians)
+                    .labelWidth(labelWidth)
+                    .build());
             return new MixtureDensityRNNOutputLayer(this);
         }
     }

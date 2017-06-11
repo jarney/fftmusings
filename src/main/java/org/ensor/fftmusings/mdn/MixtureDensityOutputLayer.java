@@ -63,8 +63,8 @@ public class MixtureDensityOutputLayer extends BaseOutputLayer {
 
     public static class Builder extends BaseOutputLayer.Builder<Builder> {
 
-        private int mOutputs = 1;
-        private int mMixturesPerOutput = 1;
+        private int mLabelWidth = 1;
+        private int mGaussians = 1;
         
         public Builder() {
         }
@@ -73,11 +73,11 @@ public class MixtureDensityOutputLayer extends BaseOutputLayer {
          * This method configures the number of gaussian mixtures to use
          * for each output component.  Each output will be modeled as a
          * linear combination of this many gaussian functions.
-         * @param aMixturesPerOutput Number of mixtures to model for each output.
+         * @param aGaussians Number of mixtures to model for each output.
          * @return This builder again for continued use.
          */
-        public Builder mixturesPerLabel(int aMixturesPerOutput) {
-            this.mMixturesPerOutput = aMixturesPerOutput;
+        public Builder gaussians(int aGaussians) {
+            this.mGaussians = aGaussians;
             return this;
         }
         
@@ -85,11 +85,11 @@ public class MixtureDensityOutputLayer extends BaseOutputLayer {
          * This method configures the number of output variables to model
          * with gaussian mixtures.  The number of gaussians to model
          * for each of them is configured separately.
-         * @param aOutputs Number of output variables to model.
+         * @param aLabelWidth Number of output variables to model.
          * @return This builder again for continued use.
          */
-        public Builder labelValues(int aOutputs) {
-            mOutputs = aOutputs;
+        public Builder labelWidth(int aLabelWidth) {
+            mLabelWidth = aLabelWidth;
             return this;
         }
 
@@ -187,8 +187,11 @@ public class MixtureDensityOutputLayer extends BaseOutputLayer {
             // multiplied by the number of outputs.  We also need to inform
             // the loss function about how many mixtures and outputs to
             // expect so that it can calculate the mixtures appropriately.
-            super.nOut(3 * mMixturesPerOutput * mOutputs);
-            super.lossFunction(new MixtureDensityCost(mMixturesPerOutput, mOutputs));
+            super.nOut((2 * mLabelWidth) * mGaussians );
+            super.lossFunction(LossMixtureDensity.builder()
+                    .gaussians(mGaussians)
+                    .labelWidth(mLabelWidth)
+                    .build());
             return new MixtureDensityOutputLayer(this);
         }
     }
