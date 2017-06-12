@@ -24,14 +24,27 @@ public class PolicyRandom implements IPolicy {
         
     }
     
-    public IAction getAction() {
-        int nextBoolean = mRNG.nextInt(50);
+    public IAction getAction(Holdings holdings) {
+        int nextBoolean = mRNG.nextInt(4);
         switch (nextBoolean) {
             case 0:
                 return new ActionHold();
-            default:
-                return new ActionBuy("CUR" + nextBoolean, (mRNG.nextDouble() - 0.5) * 200);
+            case 1:
+                return new ActionBuy("BTC", (mRNG.nextDouble() - 0.5) * 200);
+            case 2:
+                return new ActionBuy("LTC", (mRNG.nextDouble() - 0.5) * 200);
+            case 3:
+                return new ActionBuy("OTH", (mRNG.nextDouble() - 0.5) * 200);
         }
+        return new ActionHold();
+    }
+
+    @Override
+    public void nextRoundStart() {
+    }
+
+    @Override
+    public void trainRound(double score) {
     }
     
     

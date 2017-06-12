@@ -15,7 +15,7 @@ import org.ensor.fftmusings.statistics.GaussianDistribution;
 public class StocasticPriceModel {
     private double btcPhase;
     private double btcFrequency = 40;
-    private double btcScale = 0;
+    private double btcScale = 10;
     private GaussianDistribution btcDistribution;
     private Random mRNG;
     
