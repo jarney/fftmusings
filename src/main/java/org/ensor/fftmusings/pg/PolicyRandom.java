@@ -30,7 +30,7 @@ public class PolicyRandom implements IPolicy {
             case 0:
                 return new ActionHold();
             default:
-                return new ActionBuy("CUR" + nextBoolean, (mRNG.nextDouble() - 0.5) * 20);
+                return new ActionBuy("CUR" + nextBoolean, (mRNG.nextDouble() - 0.5) * 200);
         }
     }
     

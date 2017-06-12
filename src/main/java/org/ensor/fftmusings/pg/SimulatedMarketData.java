@@ -8,9 +8,6 @@ package org.ensor.fftmusings.pg;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
-import org.ensor.fftmusings.statistics.GaussianDistribution;
-import org.nd4j.linalg.api.ndarray.INDArray;
-import org.nd4j.linalg.factory.Nd4j;
 
 /**
  *

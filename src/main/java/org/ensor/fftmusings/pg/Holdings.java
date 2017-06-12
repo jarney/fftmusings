@@ -23,7 +23,7 @@ public class Holdings {
     public Holdings() {
         mAssets = new HashMap<>();
         commissionRate = 0.025;
-        commissionFee = 0;
+        commissionFee = 10;
     }
     
     public double totalValue() {
