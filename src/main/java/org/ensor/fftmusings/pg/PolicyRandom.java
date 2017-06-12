@@ -25,12 +25,12 @@ public class PolicyRandom implements IPolicy {
     }
     
     public IAction getAction() {
-        boolean nextBoolean = mRNG.nextBoolean();
-        if (nextBoolean) {
-            return new ActionHold();
-        }
-        else {
-            return new ActionBuy("BTC", (mRNG.nextDouble() - 0.5) * 20);
+        int nextBoolean = mRNG.nextInt(50);
+        switch (nextBoolean) {
+            case 0:
+                return new ActionHold();
+            default:
+                return new ActionBuy("CUR" + nextBoolean, (mRNG.nextDouble() - 0.5) * 20);
         }
     }
     

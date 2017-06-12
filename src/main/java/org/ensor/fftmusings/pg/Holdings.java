@@ -17,18 +17,20 @@ import java.util.Map;
  */
 public class Holdings {
     private final Map<String, Asset> mAssets;
+    private final double commissionRate;
+    private final double commissionFee;
     
     public Holdings() {
         mAssets = new HashMap<>();
+        commissionRate = 0.025;
+        commissionFee = 0;
     }
     
     public double totalValue() {
         double total = 0;
         
         for (Asset a : mAssets.values()) {
-            // Convert asset to USD and add to total.
-            double assetValue = a.getAmount() * a.getToUSDFactor() - a.getToUSDCost();
-            total += assetValue;
+            total += getValueOf(a.getName());
         }
         
         return total;
@@ -48,7 +50,12 @@ public class Holdings {
         
         // Reduce USD by the 'commission'
         // plus the value of the amount of currency.
-        double newUSDAmount = usdAsset.getAmount() - otherAsset.getToUSDCost() - amount * otherAsset.getToUSDFactor();
+        double newUSDAmount = usdAsset.getAmount() - amount * otherAsset.getToUSDFactor()
+                // We pay a transaction fee here
+                // equal to a percentage of the transaction
+                // amount plus a constant transaction fee.
+                - commissionRate * Math.abs(amount) * otherAsset.getToUSDFactor()
+                - commissionFee;
         double newOtherAmount = otherAsset.getAmount() + amount;
         
         // If we're out of money, we can't make a trade, so the holding
@@ -68,8 +75,7 @@ public class Holdings {
         Asset a = new Asset();
         a.setName(currency);
         a.setAmount(0);
-        a.setToUSDCost(0);
-        a.setToUSDFactor(-2.0);
+        a.setToUSDFactor(1.0);
         mAssets.put(currency, a);
         return a;
     }
@@ -101,7 +107,9 @@ public class Holdings {
      */
     public double getValueOf(String currency) {
         Asset asset = getAsset(currency);
-        return asset.getAmount() * asset.getToUSDFactor() - asset.getToUSDCost();
+        return asset.getAmount() * asset.getToUSDFactor()
+                - commissionRate * Math.abs(asset.getAmount()) * asset.getToUSDFactor()
+                - commissionFee;
     }
     
     
@@ -113,11 +121,9 @@ public class Holdings {
      * Set the market prices of the currency.
      * @param currency Which currency price to establish.
      * @param toUSDFactor How much is one unit of currency worth in USD?
-     * @param commission How much USD do we have to pay in order to transact this.
      */
-    public void setCurrencyPrice(String currency, double toUSDFactor, double commission) {
+    public void setCurrencyPrice(String currency, double toUSDFactor) {
         Asset asset = getAsset(currency);
         asset.setToUSDFactor(toUSDFactor);
-        asset.setToUSDCost(commission);
     }
 }

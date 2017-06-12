@@ -16,7 +16,6 @@ public class Asset {
     private String name;
     private double amount;
     private double toUSDFactor;
-    private double toUSDCost;
     public String toString() {
         return "(" + name + ":" + amount + ")";
     }

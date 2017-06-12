@@ -5,7 +5,10 @@
  */
 package org.ensor.fftmusings.pg;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
+import org.ensor.fftmusings.statistics.GaussianDistribution;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 
@@ -15,22 +18,30 @@ import org.nd4j.linalg.factory.Nd4j;
  */
 public class SimulatedMarketData {
 
-    private double phase0;
-    private double freq0 = 40;
+    private Map<String, StocasticPriceModel> priceModels;
     private double t = 0;
     private Random mRNG;
     
     SimulatedMarketData(Random rng) {
         mRNG = rng;
-        phase0 = (mRNG.nextDouble()-0.5) * Math.PI*2;
+        priceModels = new HashMap<>();
+        for (int i = 0; i < 50; i++) {
+            priceModels.put("CUR" + i,
+                new StocasticPriceModel(mRNG, 
+                    40,
+                    (mRNG.nextDouble()-0.5) * Math.PI*2,
+                    10 // How much randomness to +/- to price.
+                )
+            );
+        }
     }
     
     public void update(Holdings holdings) {
-        
-        double newPrice = 20 + 20 * Math.sin(t / freq0*2*Math.PI + phase0);
         t += 1;
         
-        holdings.setCurrencyPrice("BTC", newPrice, 2);
+        for (Map.Entry<String, StocasticPriceModel> pm : priceModels.entrySet()) {
+            holdings.setCurrencyPrice(pm.getKey(), pm.getValue().getPrice(t));
+        }
     }
     
 }
